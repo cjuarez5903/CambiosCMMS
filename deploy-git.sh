@@ -207,6 +207,11 @@ pm2 status
 echo ""
 echo "[7/7] Actualizando frontend..."
 
+# Backup del frontend actual
+FRONTEND_BACKUP=~/cmms-frontend-backup-$(date +%Y%m%d_%H%M%S)
+cp -r $FRONTEND $FRONTEND_BACKUP
+echo "      ✓ Backup frontend en: $FRONTEND_BACKUP"
+
 copiar_fe() {
   local src=$1 dst=$2
   mkdir -p "$(dirname $dst)"
