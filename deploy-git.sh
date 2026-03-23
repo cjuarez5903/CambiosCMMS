@@ -159,6 +159,15 @@ copiar 1733880500000-CorregirFormatoPermisosIT.ts               $BACKEND/src/mig
 echo ""
 echo "[5/6] Verificando variables de entorno..."
 
+# Restaurar .env desde backup si no existe
+if [ ! -f "$BACKEND/.env" ]; then
+  echo "      ✗ .env no encontrado — restaurando desde backup..."
+  cp "$BACKUP_DIR/.env" "$BACKEND/.env" 2>/dev/null || { echo "      ✗ ERROR: No se pudo restaurar .env. Cópialo manualmente."; rollback; }
+  echo "      ✓ .env restaurado desde backup"
+else
+  echo "      ✓ .env existe"
+fi
+
 add_env() {
   local key=$1 val=$2
   if grep -q "^${key}=" $BACKEND/.env 2>/dev/null; then
