@@ -1,4 +1,5 @@
 import { IsString, IsEnum, IsOptional, IsNotEmpty } from 'class-validator';
+import { EstadoTicket, PrioridadTicket, CategoriaTicket } from '../../../entities/it-ticket.entity';
 
 export class CreateITTicketDto {
   @IsString()
@@ -9,17 +10,17 @@ export class CreateITTicketDto {
   @IsNotEmpty()
   descripcion: string;
 
-  @IsEnum(['abierto', 'en_progreso', 'resuelto', 'cerrado'])
+  @IsEnum(EstadoTicket)
   @IsOptional()
-  estado?: 'abierto' | 'en_progreso' | 'resuelto' | 'cerrado' = 'abierto';
+  estado?: EstadoTicket = EstadoTicket.ABIERTO;
 
-  @IsEnum(['baja', 'media', 'alta', 'critica'])
+  @IsEnum(PrioridadTicket)
   @IsOptional()
-  prioridad?: 'baja' | 'media' | 'alta' | 'critica' = 'media';
+  prioridad?: PrioridadTicket = PrioridadTicket.MEDIA;
 
-  @IsEnum(['soporte_tecnico', 'hardware', 'software', 'red', 'acceso', 'sap', 'sitelink'])
+  @IsEnum(CategoriaTicket)
   @IsOptional()
-  categoria?: 'soporte_tecnico' | 'hardware' | 'software' | 'red' | 'acceso' | 'sap' | 'sitelink' = 'soporte_tecnico';
+  categoria?: CategoriaTicket = CategoriaTicket.SOPORTE_TECNICO;
 
   @IsString()
   @IsNotEmpty()
