@@ -13,6 +13,7 @@
 REPO_URL="https://github.com/cjuarez5903/CambiosCMMS.git"
 CAMBIOS=~/CambiosCMMS
 BACKEND=~/cmms-backend
+FRONTEND=~/cmms-frontend
 BACKUP_DIR=~/cmms-backend-backup-$(date +%Y%m%d_%H%M%S)
 
 echo "======================================================"
@@ -201,6 +202,52 @@ node ./node_modules/typeorm/cli.js migration:run -d dist/data-source.js || rollb
 
 pm2 restart all
 pm2 status
+
+# ── FRONTEND ─────────────────────────────────────────────
+echo ""
+echo "[7/7] Actualizando frontend..."
+
+copiar_fe() {
+  local src=$1 dst=$2
+  mkdir -p "$(dirname $dst)"
+  cp "$CAMBIOS/frontend/$src" "$dst"
+  echo "      ✓ $src"
+}
+
+copiar_fe App.tsx                              $FRONTEND/App.tsx
+copiar_fe index.tsx                            $FRONTEND/index.tsx
+copiar_fe types.ts                             $FRONTEND/types.ts
+copiar_fe constants.ts                         $FRONTEND/constants.ts
+copiar_fe pages/ITDashboard.tsx                $FRONTEND/pages/ITDashboard.tsx
+copiar_fe pages/ITSoluciones.tsx               $FRONTEND/pages/ITSoluciones.tsx
+copiar_fe pages/ITAssignedTickets.tsx          $FRONTEND/pages/ITAssignedTickets.tsx
+copiar_fe pages/Users.tsx                      $FRONTEND/pages/Users.tsx
+copiar_fe pages/Dashboard.tsx                  $FRONTEND/pages/Dashboard.tsx
+copiar_fe pages/Login.tsx                      $FRONTEND/pages/Login.tsx
+copiar_fe components/Sidebar.tsx               $FRONTEND/components/Sidebar.tsx
+copiar_fe components/Layout.tsx                $FRONTEND/components/Layout.tsx
+copiar_fe components/ITMobileTicketCard.tsx    $FRONTEND/components/ITMobileTicketCard.tsx
+copiar_fe components/ConfirmModal.tsx          $FRONTEND/components/ConfirmModal.tsx
+copiar_fe components/Modal.tsx                 $FRONTEND/components/Modal.tsx
+copiar_fe src/services/it-tickets.service.ts  $FRONTEND/src/services/it-tickets.service.ts
+copiar_fe src/services/api.ts                  $FRONTEND/src/services/api.ts
+copiar_fe src/services/roles.service.ts        $FRONTEND/src/services/roles.service.ts
+copiar_fe src/services/usuarios.service.ts     $FRONTEND/src/services/usuarios.service.ts
+copiar_fe src/context/AuthContext.tsx          $FRONTEND/src/context/AuthContext.tsx
+copiar_fe src/context/NotificationsContext.tsx $FRONTEND/src/context/NotificationsContext.tsx
+copiar_fe src/components/PermissionRoute.tsx   $FRONTEND/src/components/PermissionRoute.tsx
+copiar_fe src/components/ProtectedRoute.tsx    $FRONTEND/src/components/ProtectedRoute.tsx
+copiar_fe src/utils/accessControl.ts          $FRONTEND/src/utils/accessControl.ts
+
+echo ""
+echo "      → npm install frontend..."
+cd $FRONTEND
+npm install --silent
+
+echo "      → npm run build frontend..."
+npm run build
+
+echo "      ✓ Frontend actualizado"
 
 echo ""
 echo "======================================================"
