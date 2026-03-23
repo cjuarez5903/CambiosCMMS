@@ -126,6 +126,7 @@ copiar pagination.dto.ts                                      $BACKEND/src/modul
 
 # Archivos modificados
 copiar app.module.ts                                          $BACKEND/src/app.module.ts
+copiar data-source.ts                                         $BACKEND/src/data-source.ts
 copiar pais.entity.ts                                         $BACKEND/src/entities/pais.entity.ts
 copiar sucursal.entity.ts                                     $BACKEND/src/entities/sucursal.entity.ts
 copiar paises.service.ts                                      $BACKEND/src/modules/paises/paises.service.ts
