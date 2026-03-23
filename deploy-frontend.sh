@@ -65,6 +65,7 @@ copiar_fe src/context/NotificationsContext.tsx $FRONTEND/src/context/Notificatio
 copiar_fe src/components/PermissionRoute.tsx   $FRONTEND/src/components/PermissionRoute.tsx
 copiar_fe src/components/ProtectedRoute.tsx    $FRONTEND/src/components/ProtectedRoute.tsx
 copiar_fe src/utils/accessControl.ts          $FRONTEND/src/utils/accessControl.ts
+copiar_fe src/styles/it-mobile.css            $FRONTEND/src/styles/it-mobile.css
 
 # ── BUILD ─────────────────────────────────────────────────
 echo ""

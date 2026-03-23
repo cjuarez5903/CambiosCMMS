@@ -1,0 +1,97 @@
+/* Estilos para mejorar la responsividad de tablas IT en todos los dispositivos */
+
+/* Ocultar tabla desktop en pantallas pequeñas, medianas y laptops */
+@media (max-width: 1535px) {
+  .it-mobile-table {
+    display: none !important;
+  }
+  
+  /* Mostrar tarjetas en pantallas pequeñas, medianas y laptops */
+  [class*="2xl:hidden"] {
+    display: block !important;
+  }
+}
+
+/* Ocultar vista móvil en desktop extra grande */
+@media (min-width: 1536px) {
+  [class*="2xl:hidden"] {
+    display: none !important;
+  }
+}
+
+/* Tarjetas para vista móvil */
+.it-ticket-card {
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  margin-bottom: 1rem;
+  padding: 1rem;
+}
+
+.it-ticket-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.it-ticket-title {
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.it-ticket-meta {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.it-ticket-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.it-ticket-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #f3f4f6;
+  flex-wrap: wrap;
+}
+
+.it-ticket-action-btn {
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+}
+
+.it-ticket-action-btn:hover {
+  background: #f9fafb;
+}
+
+/* Mejorar scroll horizontal en móviles */
+@media (max-width: 768px) {
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+  }
+}
