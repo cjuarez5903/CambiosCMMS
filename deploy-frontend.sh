@@ -66,6 +66,11 @@ copiar_fe src/components/PermissionRoute.tsx   $FRONTEND/src/components/Permissi
 copiar_fe src/components/ProtectedRoute.tsx    $FRONTEND/src/components/ProtectedRoute.tsx
 copiar_fe src/utils/accessControl.ts          $FRONTEND/src/utils/accessControl.ts
 copiar_fe src/styles/it-mobile.css            $FRONTEND/src/styles/it-mobile.css
+copiar_fe src/components/ChartCard.tsx        $FRONTEND/src/components/ChartCard.tsx
+copiar_fe src/components/charts/SimplePieChart.tsx   $FRONTEND/src/components/charts/SimplePieChart.tsx
+copiar_fe src/components/charts/SimpleBarChart.tsx   $FRONTEND/src/components/charts/SimpleBarChart.tsx
+copiar_fe src/components/charts/SimpleTrendChart.tsx $FRONTEND/src/components/charts/SimpleTrendChart.tsx
+copiar_fe components/StatCard.tsx             $FRONTEND/components/StatCard.tsx
 
 # ── BUILD ─────────────────────────────────────────────────
 echo ""
