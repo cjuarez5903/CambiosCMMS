@@ -1,7 +1,15 @@
 const { DataSource } = require('typeorm');
 const { config } = require('dotenv');
+const fs = require('fs');
+const path = require('path');
 
 config();
+
+// Certificado SSL para RDS (requerido por --require_secure_transport=ON)
+const sslCertPath = path.join(process.env.HOME || '/home/ubuntu', 'cmms-backend', 'global-bundle.pem');
+const sslOptions = fs.existsSync(sslCertPath)
+  ? { ca: fs.readFileSync(sslCertPath) }
+  : undefined;
 
 // Entidades cargadas en orden explícito para evitar importaciones circulares
 // (capex-historial <-> capex-sucursal, usuario <-> sucursal)
@@ -50,6 +58,7 @@ export const AppDataSource = new DataSource({
     ITTicketHistorial,
   ],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
+  ssl: sslOptions,
   synchronize: false,
   logging: configService.get('NODE_ENV') === 'development',
   charset: 'utf8mb4',
