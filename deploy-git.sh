@@ -127,6 +127,7 @@ copiar pagination.dto.ts                                      $BACKEND/src/modul
 # Archivos modificados
 copiar app.module.ts                                          $BACKEND/src/app.module.ts
 copiar pais.entity.ts                                         $BACKEND/src/entities/pais.entity.ts
+copiar sucursal.entity.ts                                     $BACKEND/src/entities/sucursal.entity.ts
 copiar paises.service.ts                                      $BACKEND/src/modules/paises/paises.service.ts
 copiar crear-pais.dto.ts                                      $BACKEND/src/modules/paises/dto/crear-pais.dto.ts
 copiar ordenes-trabajo.service.ts                             $BACKEND/src/modules/ordenes-trabajo/ordenes-trabajo.service.ts
@@ -178,6 +179,9 @@ cd $BACKEND
 
 echo "      → npm install..."
 npm install || rollback
+
+echo "      → Limpiando build anterior..."
+rm -rf $BACKEND/dist
 
 echo "      → npm run build..."
 npm run build || rollback
