@@ -186,8 +186,8 @@ rm -rf $BACKEND/dist
 echo "      → npm run build..."
 npm run build || rollback
 
-echo "      → npm run migration:run..."
-npm run migration:run || rollback
+echo "      → Corriendo migraciones desde dist (evita problemas de ts-node)..."
+node ./node_modules/typeorm/cli.js migration:run -d dist/data-source.js || rollback
 
 pm2 restart all
 pm2 status
