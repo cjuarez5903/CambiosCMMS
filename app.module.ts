@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import * as fs from 'fs';
+import * as path from 'path';
 import { APP_GUARD, APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
 
 // Módulos
@@ -41,6 +43,10 @@ import { FiltroExcepcionesHttp } from './common/filters/http-exception.filter';
         password: configService.get('DB_PASSWORD'),
         database: configService.get('DB_DATABASE'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        ssl: (() => {
+          const certPath = path.join(process.env.HOME || '/home/ubuntu', 'cmms-backend', 'global-bundle.pem');
+          return fs.existsSync(certPath) ? { ca: fs.readFileSync(certPath) } : undefined;
+        })(),
         synchronize: false,
         logging: configService.get('NODE_ENV') === 'development',
         charset: 'utf8mb4',
