@@ -45,6 +45,7 @@ copiar_fe App.tsx                              $FRONTEND/App.tsx
 copiar_fe index.tsx                            $FRONTEND/index.tsx
 copiar_fe types.ts                             $FRONTEND/types.ts
 copiar_fe constants.ts                         $FRONTEND/constants.ts
+copiar_fe pages/PlantaTratamiento.tsx          $FRONTEND/pages/PlantaTratamiento.tsx
 copiar_fe pages/ITDashboard.tsx                $FRONTEND/pages/ITDashboard.tsx
 copiar_fe pages/ITSoluciones.tsx               $FRONTEND/pages/ITSoluciones.tsx
 copiar_fe pages/ITAssignedTickets.tsx          $FRONTEND/pages/ITAssignedTickets.tsx
@@ -56,6 +57,7 @@ copiar_fe components/Layout.tsx                $FRONTEND/components/Layout.tsx
 copiar_fe components/ITMobileTicketCard.tsx    $FRONTEND/components/ITMobileTicketCard.tsx
 copiar_fe components/ConfirmModal.tsx          $FRONTEND/components/ConfirmModal.tsx
 copiar_fe components/Modal.tsx                 $FRONTEND/components/Modal.tsx
+copiar_fe src/services/planta-tratamiento.service.ts $FRONTEND/src/services/planta-tratamiento.service.ts
 copiar_fe src/services/it-tickets.service.ts  $FRONTEND/src/services/it-tickets.service.ts
 copiar_fe src/services/api.ts                  $FRONTEND/src/services/api.ts
 copiar_fe src/services/roles.service.ts        $FRONTEND/src/services/roles.service.ts
@@ -70,7 +72,10 @@ copiar_fe src/components/ChartCard.tsx        $FRONTEND/src/components/ChartCard
 copiar_fe src/components/charts/SimplePieChart.tsx   $FRONTEND/src/components/charts/SimplePieChart.tsx
 copiar_fe src/components/charts/SimpleBarChart.tsx   $FRONTEND/src/components/charts/SimpleBarChart.tsx
 copiar_fe src/components/charts/SimpleTrendChart.tsx $FRONTEND/src/components/charts/SimpleTrendChart.tsx
-copiar_fe components/StatCard.tsx             $FRONTEND/components/StatCard.tsx
+copiar_fe components/StatCard.tsx                         $FRONTEND/components/StatCard.tsx
+copiar_fe components/HistorialOrden.tsx                   $FRONTEND/components/HistorialOrden.tsx
+copiar_fe pages/WorkOrders.tsx                            $FRONTEND/pages/WorkOrders.tsx
+copiar_fe src/services/ordenes-trabajo.service.ts         $FRONTEND/src/services/ordenes-trabajo.service.ts
 
 # ── BUILD ─────────────────────────────────────────────────
 echo ""

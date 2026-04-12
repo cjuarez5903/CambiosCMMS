@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# SCRIPT DE DEPLOY — MRB CMMS — Marzo 2026
+# SCRIPT DE DEPLOY — MRB CMMS — Abril 2026
 # Ejecutar desde el servidor Ubuntu:
 #   bash ~/CambiosCMMS/deploy.sh
 # ============================================================
@@ -63,6 +63,7 @@ dirs=(
   "$BACKEND/src/modules/email"
   "$BACKEND/src/modules/it-tickets"
   "$BACKEND/src/modules/planta-tratamiento/dto"
+  "$BACKEND/src/modules/ordenes-trabajo/entities"
 )
 
 for dir in "${dirs[@]}"; do
@@ -98,6 +99,14 @@ cp $CAMBIOS/crear-pais.dto.ts $BACKEND/src/modules/paises/dto/
 cp $BACKEND/src/modules/ordenes-trabajo/ordenes-trabajo.service.ts $BACKEND/src/modules/ordenes-trabajo/ordenes-trabajo.service.ts.old 2>/dev/null; echo "      ✓ ordenes-trabajo.service.ts.old"
 cp $CAMBIOS/ordenes-trabajo.service.ts $BACKEND/src/modules/ordenes-trabajo/
 
+# ordenes-trabajo.controller.ts
+cp $BACKEND/src/modules/ordenes-trabajo/ordenes-trabajo.controller.ts $BACKEND/src/modules/ordenes-trabajo/ordenes-trabajo.controller.ts.old 2>/dev/null; echo "      ✓ ordenes-trabajo.controller.ts.old"
+cp $CAMBIOS/ordenes-trabajo.controller.ts $BACKEND/src/modules/ordenes-trabajo/
+
+# ordenes-trabajo.module.ts
+cp $BACKEND/src/modules/ordenes-trabajo/ordenes-trabajo.module.ts $BACKEND/src/modules/ordenes-trabajo/ordenes-trabajo.module.ts.old 2>/dev/null; echo "      ✓ ordenes-trabajo.module.ts.old"
+cp $CAMBIOS/ordenes-trabajo.module.ts $BACKEND/src/modules/ordenes-trabajo/
+
 # email.service.ts
 cp $BACKEND/src/modules/email/email.service.ts $BACKEND/src/modules/email/email.service.ts.old 2>/dev/null; echo "      ✓ email.service.ts.old"
 cp $CAMBIOS/email.service.ts $BACKEND/src/modules/email/
@@ -120,6 +129,7 @@ echo "[3/6] Copiando archivos nuevos..."
 
 cp $CAMBIOS/configuracion-planta.entity.ts $BACKEND/src/entities/; echo "      ✓ configuracion-planta.entity.ts"
 cp $CAMBIOS/lectura-planta.entity.ts $BACKEND/src/entities/; echo "      ✓ lectura-planta.entity.ts"
+cp $CAMBIOS/entities/orden-trabajo-comentario.entity.ts $BACKEND/src/entities/; echo "      ✓ orden-trabajo-comentario.entity.ts"
 cp $CAMBIOS/planta-tratamiento.module.ts $BACKEND/src/modules/planta-tratamiento/; echo "      ✓ planta-tratamiento.module.ts"
 cp $CAMBIOS/planta-tratamiento.service.ts $BACKEND/src/modules/planta-tratamiento/; echo "      ✓ planta-tratamiento.service.ts"
 cp $CAMBIOS/planta-tratamiento.controller.ts $BACKEND/src/modules/planta-tratamiento/; echo "      ✓ planta-tratamiento.controller.ts"
@@ -162,6 +172,38 @@ else
   echo "PLANTA_ALERTA_EMAILS=juanjo@mrbstorage.com,correo2@mrbstorage.com" >> $BACKEND/.env
   echo "      ✓ PLANTA_ALERTA_EMAILS agregado al .env"
   echo "      ⚠ EDITA el .env y pon los correos correctos!"
+fi
+
+# FRONTEND_URL — actualizar a dominio real
+sed -i 's|FRONTEND_URL=.*|FRONTEND_URL=https://cmms.mrbstorage.com|' $BACKEND/.env
+echo "      ✓ FRONTEND_URL actualizado a https://cmms.mrbstorage.com"
+
+# ── TABLA COMENTARIOS ÓRDENES DE TRABAJO ────────────────
+echo ""
+echo "[5b/6] Creando tabla orden_trabajo_comentarios si no existe..."
+
+DB_HOST=$(grep DB_HOST $BACKEND/.env | cut -d= -f2)
+DB_PORT=$(grep DB_PORT $BACKEND/.env | cut -d= -f2)
+DB_USER=$(grep DB_USERNAME $BACKEND/.env | cut -d= -f2)
+DB_PASS=$(grep DB_PASSWORD $BACKEND/.env | cut -d= -f2)
+DB_NAME=$(grep DB_DATABASE $BACKEND/.env | cut -d= -f2)
+
+mysql -h"$DB_HOST" -P"${DB_PORT:-3306}" -u"$DB_USER" -p"$DB_PASS" "$DB_NAME" <<'SQL'
+CREATE TABLE IF NOT EXISTS orden_trabajo_comentarios (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  orden_id INT NOT NULL,
+  comentario TEXT NOT NULL,
+  usuario_id INT NOT NULL,
+  fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (orden_id) REFERENCES ordenes_trabajo(id) ON DELETE CASCADE,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+SQL
+
+if [ $? -eq 0 ]; then
+  echo "      ✓ Tabla orden_trabajo_comentarios lista"
+else
+  echo "      ⚠ No se pudo crear la tabla (puede que ya exista o falta el cliente mysql)"
 fi
 
 # ── COMPILAR Y MIGRAR ─────────────────────────────────────

@@ -18,6 +18,7 @@ import CapexDashboard from './pages/CapexDashboard';
 import ITSoluciones from './pages/ITSoluciones';
 import ITDashboard from './pages/ITDashboard';
 import ITAssignedTickets from './pages/ITAssignedTickets';
+import PlantaTratamiento from './pages/PlantaTratamiento';
 import Login from './pages/Login';
 
 // Component to conditionally render default dashboard
@@ -159,6 +160,16 @@ const App: React.FC = () => {
               element={
                 <PermissionRoute requiredPermission="it_soluciones">
                   <ITAssignedTickets />
+                </PermissionRoute>
+              }
+            />
+
+            {/* Planta de Tratamiento - Administrador y Administrador de Sucursal */}
+            <Route
+              path="planta-tratamiento"
+              element={
+                <PermissionRoute requiredPermission="planta_tratamiento">
+                  <PlantaTratamiento />
                 </PermissionRoute>
               }
             />

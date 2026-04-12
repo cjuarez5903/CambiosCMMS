@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, Package, Users, Settings, LogOut, Building, X, UserCog, Globe, DollarSign, Monitor, UserCheck } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, Package, Users, Settings, LogOut, Building, X, UserCog, Globe, DollarSign, Monitor, UserCheck, Droplets } from 'lucide-react';
 import { useAuth } from '../src/context/AuthContext';
 import ConfirmModal from './ConfirmModal';
 
@@ -27,6 +27,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
     usuarios: { name: 'Usuarios', icon: UserCog, path: '/users' },
     paises: { name: 'Países', icon: Globe, path: '/countries' },
     capex: { name: 'CAPEX', icon: DollarSign, path: '/capex' },
+    planta_tratamiento: { name: 'Planta de Tratamiento', icon: Droplets, path: '/planta-tratamiento' },
   };
 
   // Obtener rutas permitidas desde los permisos del usuario

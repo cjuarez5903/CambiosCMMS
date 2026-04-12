@@ -170,7 +170,7 @@ export class EmailService {
             <p>Puedes ver los detalles completos de la orden de trabajo accediendo al sistema:</p>
 
             <center>
-              <a href="${frontendUrl}/#/work-orders" class="btn">Ver Órdenes de Trabajo</a>
+              <a href="${frontendUrl}/#/work-orders?ot=${ordenNumero}" class="btn">Ver Orden de Trabajo</a>
             </center>
 
             <div class="footer">
@@ -294,7 +294,7 @@ export class EmailService {
               <div class="info-row"><span class="label">Estado:</span> <span class="badge">PENDIENTE</span></div>
             </div>
             <center>
-              <a href="${frontendUrl}/#/work-orders" class="btn">Ver Órdenes de Trabajo</a>
+              <a href="${frontendUrl}/#/work-orders?ot=${ordenNumero}" class="btn">Ver Orden de Trabajo</a>
             </center>
             <div class="footer">
               <p>Este es un correo automático del Sistema CMMS de Mr. B Storage.</p>
@@ -613,6 +613,43 @@ export class EmailService {
     </body></html>`;
 
     await this.enviarConTimeoutSimple(emailFrom, params.destinatario, `Nuevo comentario en Ticket IT #${params.ticketId}`, html, TIMEOUT_MS);
+  }
+
+  // ── ÓRDENES DE TRABAJO — COMENTARIOS ────────────────────────────────────
+
+  async enviarComentarioOrdenTrabajo(params: {
+    numeroOT: string;
+    comentario: string;
+    autor: string;
+    correos: string[];
+  }): Promise<void> {
+    const emailFrom = this.configService.get<string>('EMAIL_FROM');
+    const TIMEOUT_MS = 8000;
+
+    const html = `<!DOCTYPE html><html><head><style>
+      body{font-family:Arial,sans-serif;line-height:1.6;color:#333}
+      .container{max-width:600px;margin:0 auto;padding:20px;background:#f9f9f9}
+      .header{background:#1d4ed8;color:white;padding:20px;text-align:center;border-radius:5px 5px 0 0}
+      .content{background:white;padding:30px;border-radius:0 0 5px 5px}
+      .info-box{background:#eff6ff;padding:15px;border-left:4px solid #1d4ed8;margin:20px 0}
+      .comentario-box{background:#f3f4f6;padding:15px;border-radius:5px;margin:15px 0;font-style:italic}
+      .info-row{margin:10px 0}.label{font-weight:bold;color:#1d4ed8}
+      .footer{text-align:center;margin-top:20px;color:#666;font-size:12px}
+    </style></head><body>
+      <div class="container">
+        <div class="header"><h1>Nuevo Comentario — Orden de Trabajo #${params.numeroOT}</h1></div>
+        <div class="content">
+          <div class="info-box">
+            <div class="info-row"><span class="label">OT #:</span> ${params.numeroOT}</div>
+            <div class="info-row"><span class="label">Comentó:</span> ${params.autor}</div>
+          </div>
+          <div class="comentario-box">${params.comentario}</div>
+          <div class="footer"><p>Sistema CMMS — Mr. B Storage. No responder este correo.</p></div>
+        </div>
+      </div>
+    </body></html>`;
+
+    await this.enviarMultiples(emailFrom, params.correos, `Nuevo comentario en OT #${params.numeroOT}`, html, TIMEOUT_MS);
   }
 
   // ── HELPERS INTERNOS ─────────────────────────────────────────────────────

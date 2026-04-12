@@ -17,6 +17,7 @@ import { CompletarOrdenDto } from './dto/completar-orden.dto';
 import { CapexService } from '../capex/capex.service';
 import { EmailService } from '../email/email.service';
 import { ConfigService } from '@nestjs/config';
+import { pool } from '../it-tickets/it-tickets.service';
 
 @Injectable()
 export class OrdenesTrabajoService {
@@ -224,8 +225,16 @@ export class OrdenesTrabajoService {
       }
     }
 
-    const count = await this.ordenTrabajoRepository.count();
-    const numeroOT = 'OT-' + año + '-' + String(count + 1).padStart(4, '0');
+    // BUG 8 FIX: usar MAX del año actual en vez de count() para evitar
+    // race conditions y números duplicados cuando se borran OTs
+    const maxResult = await this.ordenTrabajoRepository.manager.query(
+      `SELECT MAX(CAST(SUBSTRING_INDEX(numero_ot, '-', -1) AS UNSIGNED)) AS maxSeq
+       FROM ordenes_trabajo
+       WHERE numero_ot LIKE ?`,
+      [`OT-${año}-%`],
+    );
+    const maxSeq = (maxResult[0]?.maxSeq || 0) as number;
+    const numeroOT = 'OT-' + año + '-' + String(maxSeq + 1).padStart(4, '0');
 
     const datosConvertidos = await this.aplicarConversionMoneda(
       { ...crearOrdenDto },
@@ -907,5 +916,81 @@ export class OrdenesTrabajoService {
 
     // Retornar la orden actualizada
     return this.findOne(id);
+  }
+
+  async obtenerComentarios(ordenId: number): Promise<any[]> {
+    const [rows] = await pool.query(
+      `SELECT otc.id, otc.comentario, otc.fecha_creacion,
+              CONCAT(u.nombre, ' ', u.apellido) AS usuario_nombre
+       FROM orden_trabajo_comentarios otc
+       JOIN usuarios u ON u.id = otc.usuario_id
+       WHERE otc.orden_id = ?
+       ORDER BY otc.fecha_creacion ASC`,
+      [ordenId],
+    ) as [any[], any];
+    return rows;
+  }
+
+  async agregarComentario(ordenId: number, comentario: string, user: any): Promise<any> {
+    const usuarioId = user.sub;
+
+    const [result] = await pool.query(
+      `INSERT INTO orden_trabajo_comentarios (orden_id, comentario, usuario_id) VALUES (?, ?, ?)`,
+      [ordenId, comentario, usuarioId],
+    ) as [any, any];
+
+    const [infoRows] = await pool.query(
+      `SELECT ot.numero_ot,
+              ot.estado,
+              sol.email AS solicitante_email,
+              asig.email AS asignado_email,
+              CONCAT(u.nombre, ' ', u.apellido) AS autor_nombre
+       FROM ordenes_trabajo ot
+       LEFT JOIN usuarios sol ON sol.id = ot.solicitado_por
+       LEFT JOIN usuarios asig ON asig.id = ot.asignado_a_usuario_id
+       JOIN usuarios u ON u.id = ?
+       WHERE ot.id = ?`,
+      [usuarioId, ordenId],
+    ) as [any[], any];
+
+    const info = infoRows[0];
+    const autorEmail = user.email;
+
+    // Registrar en historial (sin cambio de estado)
+    if (info?.estado) {
+      const entradaHistorial = this.historialRepository.create({
+        ordenTrabajoId: ordenId,
+        estadoAnterior: info.estado as EstadoOrdenTrabajo,
+        estadoNuevo: info.estado as EstadoOrdenTrabajo,
+        usuarioId,
+        comentario,
+        datosAdicionales: { tipo: 'comentario', autor: info.autor_nombre },
+      });
+      await this.historialRepository.save(entradaHistorial);
+    }
+
+    setImmediate(async () => {
+      if (!info) return;
+      const correos = [info.solicitante_email, info.asignado_email]
+        .filter(e => e && e !== autorEmail);
+      if (correos.length === 0) return;
+      try {
+        await this.emailService.enviarComentarioOrdenTrabajo({
+          numeroOT: info.numero_ot,
+          comentario,
+          autor: info.autor_nombre,
+          correos,
+        });
+      } catch (e) {
+        console.error('Error enviando email de comentario OT:', e?.message);
+      }
+    });
+
+    return {
+      id: result.insertId,
+      comentario,
+      usuario_nombre: info?.autor_nombre || '',
+      fecha_creacion: new Date(),
+    };
   }
 }
