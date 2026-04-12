@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
-import { AlertTriangle, CheckCircle, Clock, DollarSign, Package, Building, Users as UsersIcon, Monitor, Plus } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, DollarSign, Package, Building, Users as UsersIcon } from 'lucide-react';
 import StatCard from '../components/StatCard';
 import { COLORS } from '../constants';
 import ordenesTrabajoService from '../src/services/ordenes-trabajo.service';
@@ -13,17 +13,16 @@ import activosService from '../src/services/activos.service';
 import proveedoresService from '../src/services/proveedores.service';
 import { obtenerCodigoPais } from '../src/utils/paises';
 import { useAuth } from '../src/context/AuthContext';
-import ticketsService from '../src/services/it-tickets.service';
 
 const Dashboard: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [permissionError, setPermissionError] = useState<string>('');
   const [stats, setStats] = useState<any>(null);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
-  const [itTickets, setItTickets] = useState<any[]>([]);
 
   // Helper para formatear fechas correctamente
   const formatearFecha = (fecha: string | Date | null | undefined): string => {
@@ -60,101 +59,79 @@ const Dashboard: React.FC = () => {
       ]);
 
       const ordenes = ordenesData.datos || ordenesData;
-      const estadisticas = ordenesData.estadisticas;
 
-      // Calcular estadísticas
-      const abiertas = ordenes.filter((o: any) => ['pendiente', 'asignada'].includes(o.estado)).length;
-      const urgentes = ordenes.filter((o: any) => o.prioridad === 'urgente').length;
+      // Calcular estadísticas por estado
+      const pendientes = ordenes.filter((o: any) => o.estado?.toLowerCase() === 'pendiente').length;
+      const asignadas  = ordenes.filter((o: any) => o.estado?.toLowerCase() === 'asignada').length;
+      const urgentes   = ordenes.filter((o: any) => o.prioridad === 'urgente').length;
+
       const completadasMes = ordenes.filter((o: any) => {
-        if (o.estado !== 'completada') return false;
-        if (!o.fechaCompletada) return false;
-        const fecha = new Date(o.fechaCompletada);
+        if (o.estado?.toLowerCase() !== 'completada') return false;
+        if (!o.fechaCompletado) return false;
+        const fecha = new Date(o.fechaCompletado);
         const hoy = new Date();
         return fecha.getMonth() === hoy.getMonth() && fecha.getFullYear() === hoy.getFullYear();
       }).length;
 
-      const gastoTotal = ordenes.reduce((sum: number, o: any) => sum + (Number(o.costoReal) || 0), 0);
+      // Gasto total: excluye órdenes PENDIENTE (sin monto confirmado)
+      const ordenesConGasto = ordenes.filter((o: any) => o.estado?.toLowerCase() !== 'pendiente');
+      const gastoTotal = ordenesConGasto.reduce(
+        (sum: number, o: any) => sum + (Number(o.costoReal) || 0),
+        0
+      );
+
+      // Desglose de gasto por país
+      const gastoPorPaisMap: Record<string, number> = {};
+      ordenesConGasto.forEach((o: any) => {
+        const pais = o.sucursal?.pais?.nombre;
+        if (pais) {
+          gastoPorPaisMap[pais] = (gastoPorPaisMap[pais] || 0) + (Number(o.costoReal) || 0);
+        }
+      });
+      const gastoPorPaisArray = Object.entries(gastoPorPaisMap)
+        .map(([nombre, total]) => ({ nombre, total }))
+        .filter(p => p.total > 0)
+        .sort((a, b) => b.total - a.total);
 
       // Datos para gráfico de estado
       const statusData = [
-        { name: 'Pendiente', value: ordenes.filter((o: any) => o.estado === 'pendiente').length, color: COLORS.blue },
-        { name: 'Asignada', value: ordenes.filter((o: any) => o.estado === 'asignada').length, color: '#3b82f6' },
-        { name: 'En Progreso', value: ordenes.filter((o: any) => o.estado === 'en_progreso').length, color: COLORS.orange },
-        { name: 'Completadas', value: ordenes.filter((o: any) => o.estado === 'completada').length, color: COLORS.teal },
-        { name: 'Canceladas', value: ordenes.filter((o: any) => o.estado === 'cancelada').length, color: '#ef4444' },
-      ].filter(item => item.value > 0); // Solo mostrar estados con valores > 0
+        { name: 'Pendiente',   value: ordenes.filter((o: any) => o.estado?.toLowerCase() === 'pendiente').length,   color: COLORS.blue },
+        { name: 'Asignada',    value: ordenes.filter((o: any) => o.estado?.toLowerCase() === 'asignada').length,    color: '#3b82f6' },
+        { name: 'En Progreso', value: ordenes.filter((o: any) => o.estado?.toLowerCase() === 'en_progreso').length, color: COLORS.orange },
+        { name: 'Completadas', value: ordenes.filter((o: any) => o.estado?.toLowerCase() === 'completada').length,  color: COLORS.teal },
+        { name: 'Canceladas',  value: ordenes.filter((o: any) => o.estado?.toLowerCase() === 'cancelada').length,   color: '#ef4444' },
+      ].filter(item => item.value > 0);
 
-      // Datos por país (agrupando por sucursal y país)
+      // Datos por país para gráfico de barras
       const costoPorPais: any = {};
       ordenes.forEach((o: any) => {
         if (o.sucursal?.pais?.nombre) {
           const pais = o.sucursal.pais.nombre;
-          if (!costoPorPais[pais]) {
-            costoPorPais[pais] = 0;
-          }
-          // Usar costoReal si existe, sino costoEstimado, sino 0
+          if (!costoPorPais[pais]) costoPorPais[pais] = 0;
           const costo = Number(o.costoReal) || Number(o.costoEstimado) || 0;
           costoPorPais[pais] += costo;
         }
       });
-
       const countryCostData = Object.keys(costoPorPais)
         .map(pais => ({
           name: obtenerCodigoPais(pais),
           nombreCompleto: pais,
           costos: costoPorPais[pais],
         }))
-        .filter(item => item.costos > 0); // Solo mostrar países con costos > 0
-
-      // Cargar tickets IT según el rol del usuario
-      let ticketsITData = [];
-      if (user?.permisos?.todo === true) {
-        // Admin: usar endpoint de dashboard para ver TODOS los tickets
-        try {
-          const ticketsResponse = await ticketsService.listarDashboard({ porPagina: 10 });
-          ticketsITData = ticketsResponse.datos || [];
-          setItTickets(ticketsITData);
-        } catch (error) {
-          console.error('Error al cargar tickets del dashboard:', error);
-          setItTickets([]);
-        }
-      } else if (user?.permisos?.rutas?.includes('it_soluciones')) {
-        // IT: ver tickets en su dashboard (todos los tickets para gestión)
-        try {
-          const ticketsResponse = await ticketsService.listar({ porPagina: 10 });
-          ticketsITData = ticketsResponse.datos || [];
-          setItTickets(ticketsITData);
-        } catch (error) {
-          console.error('Error al cargar tickets IT:', error);
-          setItTickets([]);
-        }
-      } else if (user?.email) {
-        // Otros usuarios: mostrar tickets creados por ellos
-        try {
-          const ticketsResponse = await ticketsService.listar({ 
-            porPagina: 10, 
-            // Para otros usuarios, mostrar tickets donde ellos son solicitante
-            asignado_a: user.email 
-          });
-          ticketsITData = ticketsResponse.datos || [];
-          setItTickets(ticketsITData);
-        } catch (error) {
-          console.error('Error al cargar tickets asignados:', error);
-          setItTickets([]);
-        }
-      }
+        .filter(item => item.costos > 0);
 
       setStats({
-        abiertas,
+        pendientes,
+        asignadas,
         urgentes,
         completadasMes,
         gastoTotal,
+        gastoPorPaisArray,
         statusData,
         countryCostData,
         totalSucursales: Array.isArray(sucursalesData) ? sucursalesData.length : (sucursalesData as any)?.datos?.length || 0,
         totalActivos: Array.isArray(activosData) ? activosData.length : (activosData as any)?.datos?.length || 0,
         totalProveedores: Array.isArray(proveedoresData) ? proveedoresData.length : (proveedoresData as any)?.datos?.length || 0,
-        ticketsITAbiertos: ticketsITData.filter((t: any) => t.estado === 'abierto').length,
       });
 
       // Órdenes recientes (últimas 5)
@@ -173,21 +150,16 @@ const Dashboard: React.FC = () => {
 
   const getPrioridadColor = (prioridad: string) => {
     switch (prioridad) {
-      case 'baja': return 'bg-gray-100 text-gray-800';
-      case 'media': return 'bg-blue-100 text-blue-800';
-      case 'alta': return 'bg-orange-100 text-orange-800';
+      case 'baja':    return 'bg-gray-100 text-gray-800';
+      case 'media':   return 'bg-blue-100 text-blue-800';
+      case 'alta':    return 'bg-orange-100 text-orange-800';
       case 'urgente': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      default:        return 'bg-gray-100 text-gray-800';
     }
   };
 
   const formatPrioridad = (prioridad: string) => {
-    const prioridades: any = {
-      'baja': 'Baja',
-      'media': 'Media',
-      'alta': 'Alta',
-      'urgente': 'Urgente',
-    };
+    const prioridades: any = { baja: 'Baja', media: 'Media', alta: 'Alta', urgente: 'Urgente' };
     return prioridades[prioridad] || prioridad;
   };
 
@@ -232,14 +204,25 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* KPI Cards */}
+      {/* KPI Cards — fila 1: 4 tarjetas de estado */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="OTs Abiertas"
-          value={stats?.abiertas?.toString() || '0'}
+          value={stats?.pendientes?.toString() || '0'}
           icon={Clock}
           color="blue"
-          trend="Pendientes y asignadas"
+          trend="Sin asignar"
+          actionLabel="Ver Pendientes →"
+          onAction={() => navigate('/work-orders?estado=PENDIENTE')}
+        />
+        <StatCard
+          title="OTs Asignadas"
+          value={stats?.asignadas?.toString() || '0'}
+          icon={Clock}
+          color="lightblue"
+          trend="Asignadas, sin iniciar"
+          actionLabel="Ver Asignadas →"
+          onAction={() => navigate('/work-orders?estado=ASIGNADA')}
         />
         <StatCard
           title="OTs Urgentes"
@@ -247,6 +230,8 @@ const Dashboard: React.FC = () => {
           icon={AlertTriangle}
           color="orange"
           trend={stats?.urgentes > 0 ? 'Atención requerida' : 'Sin urgencias'}
+          actionLabel="Ver Urgentes →"
+          onAction={() => navigate('/work-orders?prioridad=urgente')}
         />
         <StatCard
           title="Completadas (Mes)"
@@ -254,17 +239,39 @@ const Dashboard: React.FC = () => {
           icon={CheckCircle}
           color="teal"
           trend="Este mes"
-        />
-        <StatCard
-          title="Gasto Total"
-          value={`$${stats?.gastoTotal?.toFixed(2) || '0.00'} USD`}
-          icon={DollarSign}
-          color="lightblue"
+          actionLabel="Ver Completadas →"
+          onAction={() => navigate('/work-orders?tab=completadas')}
         />
       </div>
 
+      {/* KPI Card — Gasto Total con desglose por país */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <p className="text-sm font-medium text-gray-500 mb-1">Gasto Total Acumulado</p>
+            <h3 className="text-2xl font-bold text-gray-800">
+              ${stats?.gastoTotal?.toFixed(2) || '0.00'} USD
+            </h3>
+            <p className="text-xs text-gray-400 mt-1">Excluye órdenes pendientes sin monto confirmado</p>
+          </div>
+          <div className="p-3 rounded-lg bg-sky-50 text-mrb-lightblue">
+            <DollarSign size={24} />
+          </div>
+        </div>
+        {stats?.gastoPorPaisArray?.length > 0 && (
+          <div className="border-t border-gray-100 pt-3 space-y-1">
+            {stats.gastoPorPaisArray.map((p: any) => (
+              <div key={p.nombre} className="flex justify-between text-sm">
+                <span className="text-gray-600">{p.nombre}</span>
+                <span className="font-medium text-gray-800">${p.total.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Secondary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -298,43 +305,6 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
-        
-        {/* IT Tickets Section */}
-        {user?.permisos?.rutas?.includes('it_soluciones') || user?.permisos?.todo === true ? (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Tickets IT Abiertos</p>
-                <p className="text-2xl font-bold text-gray-800 mt-1">{stats?.ticketsITAbiertos || 0}</p>
-              </div>
-              <div className="h-12 w-12 bg-purple-50 rounded-lg flex items-center justify-center">
-                <Monitor className="text-purple-600" size={24} />
-              </div>
-            </div>
-            <button
-              onClick={() => window.location.hash = '/it-soluciones'}
-              className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors text-sm font-medium"
-            >
-              <Plus size={16} />
-              Ver Tickets IT
-            </button>
-          </div>
-        ) : user?.email && (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Mis Tickets Asignados</p>
-                <p className="text-2xl font-bold text-gray-800 mt-1">{stats?.ticketsITAbiertos || 0}</p>
-              </div>
-              <div className="h-12 w-12 bg-blue-50 rounded-lg flex items-center justify-center">
-                <Monitor className="text-blue-600" size={24} />
-              </div>
-            </div>
-            <div className="mt-3 text-sm text-gray-600">
-              Solo puedes ver los tickets asignados a ti. Para gestión completa, contacta al equipo de IT.
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Charts Section */}
