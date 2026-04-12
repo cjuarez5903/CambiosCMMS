@@ -62,6 +62,7 @@ dirs=(
   "$BACKEND/src/modules/ordenes-trabajo"
   "$BACKEND/src/modules/email"
   "$BACKEND/src/modules/it-tickets"
+  "$BACKEND/src/modules/it-tickets/entities"
   "$BACKEND/src/modules/planta-tratamiento/dto"
   "$BACKEND/src/modules/ordenes-trabajo/entities"
 )
@@ -127,6 +128,9 @@ cp $CAMBIOS/package.json $BACKEND/
 echo ""
 echo "[3/6] Copiando archivos nuevos..."
 
+cp $CAMBIOS/it-ticket.entity.ts $BACKEND/src/modules/it-tickets/entities/; echo "      ✓ it-ticket.entity.ts"
+cp $CAMBIOS/it-ticket-comentario.entity.ts $BACKEND/src/modules/it-tickets/entities/; echo "      ✓ it-ticket-comentario.entity.ts"
+cp $CAMBIOS/it-ticket-historial.entity.ts $BACKEND/src/modules/it-tickets/entities/; echo "      ✓ it-ticket-historial.entity.ts"
 cp $CAMBIOS/configuracion-planta.entity.ts $BACKEND/src/entities/; echo "      ✓ configuracion-planta.entity.ts"
 cp $CAMBIOS/lectura-planta.entity.ts $BACKEND/src/entities/; echo "      ✓ lectura-planta.entity.ts"
 cp $CAMBIOS/entities/orden-trabajo-comentario.entity.ts $BACKEND/src/entities/; echo "      ✓ orden-trabajo-comentario.entity.ts"
