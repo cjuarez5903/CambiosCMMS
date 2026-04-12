@@ -120,6 +120,10 @@ cp $CAMBIOS/it-tickets.service.ts $BACKEND/src/modules/it-tickets/
 cp $BACKEND/src/modules/usuarios/usuarios.controller.ts $BACKEND/src/modules/usuarios/usuarios.controller.ts.old 2>/dev/null; echo "      ✓ usuarios.controller.ts.old"
 cp $CAMBIOS/usuarios.controller.ts $BACKEND/src/modules/usuarios/
 
+# usuarios.service.ts
+cp $BACKEND/src/modules/usuarios/usuarios.service.ts $BACKEND/src/modules/usuarios/usuarios.service.ts.old 2>/dev/null; echo "      ✓ usuarios.service.ts.old"
+cp $CAMBIOS/usuarios.service.ts $BACKEND/src/modules/usuarios/
+
 # roles.guard.ts
 cp $BACKEND/src/common/guards/roles.guard.ts $BACKEND/src/common/guards/roles.guard.ts.old 2>/dev/null; echo "      ✓ roles.guard.ts.old"
 cp $CAMBIOS/roles.guard.ts $BACKEND/src/common/guards/
