@@ -72,7 +72,7 @@ export interface EstadisticasTicketsResponse {
 }
 
 class ITTicketsService {
-  private baseUrl = `${API_URL}/api/it-tickets`;
+  private baseUrl = `${API_URL}/it-tickets`;
 
   async listar(params?: {
     pagina?: number;
