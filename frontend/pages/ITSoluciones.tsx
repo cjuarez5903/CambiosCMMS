@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Monitor, Plus, Search, Edit2, Trash2, Clock, CheckCircle, AlertCircle, X, Save, User, Calendar, MessageSquare, UserPlus, RotateCcw, History, Filter } from 'lucide-react';
-import ConfirmModal from '../components/ConfirmModal';
+import { Monitor, Plus, Search, Edit2, Trash2, Clock, CheckCircle, AlertCircle, X, Save, MessageSquare, UserPlus, RotateCcw, History } from 'lucide-react';
+import Swal from 'sweetalert2';
 import Pagination from '../src/components/Pagination';
 import usuariosService from '../src/services/usuarios.service';
 import ticketsService from '../src/services/it-tickets.service';
@@ -74,22 +74,22 @@ const ITSoluciones: React.FC = () => {
   const [filtroAsignacion, setFiltroAsignacion] = useState(''); // Nuevo filtro para asignación
   
   // Check if user has IT permissions
-  const isITUser = user?.rol?.permisos?.rutas?.includes('it_dashboard') && (user?.rol?.nombre === 'Técnico IT' || user?.rol?.nombre === 'Administrador IT') || user?.permisos?.todo === true;
-  const isAdmin = user?.permisos?.todo === true;
-  const hasITSoluciones = user?.rol?.permisos?.rutas?.includes('it_soluciones') || user?.permisos?.todo;
-  
-  // Permissions for actions
-  const canAssignTickets = isAdmin || isITUser;
-  const canEditTickets = isAdmin || isITUser;
-  const canChangeStatus = isAdmin || isITUser;
-  const canDeleteTickets = isAdmin || isITUser;
-  // Comments: IT users can comment on all tickets, but solicitante/asignado can also comment on their own tickets
-  // The actual permission check is done per-ticket in canAddComment
-  const canComment = true; // Allow trying to comment, actual check is per ticket
-  const canViewComments = true; // Allow trying to view, actual check is per ticket
-  const canViewHistory = hasITSoluciones;
-  const canManageTickets = isAdmin || isITUser || user?.rol?.permisos?.it_tickets?.crear === true;
-  const canManageIT = isAdmin || isITUser; // Solo Admin y personal IT pueden asignar tickets
+  const isITUser = (user?.rol?.nombre === 'Técnico IT' || user?.rol?.nombre === 'Administrador IT') && user?.rol?.permisos?.rutas?.includes('it_soluciones');
+  const isAdmin = user?.permisos?.todo === true && user?.rol?.nombre === 'Administrador';
+  const isAdminIT = user?.rol?.nombre === 'Administrador IT';
+  const hasITSoluciones = user?.rol?.permisos?.rutas?.includes('it_soluciones');
+
+  // Permisos granulares — los roles IT usan it_tickets.*, Admin usa todo:true como fallback
+  const _itPermisos = user?.rol?.permisos?.it_tickets;
+  const canAssignTickets  = _itPermisos?.asignar       === true || isAdmin || isAdminIT;
+  const canEditTickets    = _itPermisos?.editar         === true || isAdmin || isAdminIT;
+  const canChangeStatus   = _itPermisos?.cambiar_estado === true || isAdmin || isAdminIT;
+  const canDeleteTickets  = _itPermisos?.eliminar       === true || isAdmin;
+  const canComment        = _itPermisos?.comentarios    === true || isAdmin || isAdminIT;
+  const canViewComments   = _itPermisos?.comentarios    === true || isAdmin || isAdminIT;
+  const canViewHistory    = _itPermisos?.historial      === true || isAdmin || isAdminIT;
+  const canManageTickets  = _itPermisos?.crear          === true || isAdmin || isAdminIT;
+  const canManageIT       = _itPermisos?.asignar        === true || isAdmin || isAdminIT;
   
   // Estados de paginación
   const [paginaActual, setPaginaActual] = useState(1);
@@ -102,7 +102,7 @@ const ITSoluciones: React.FC = () => {
     descripcion: '',
     prioridad: 'media' as 'baja' | 'media' | 'alta' | 'critica',
     categoria: 'soporte_tecnico',
-    solicitante: '',
+    solicitante: user?.email || '',
     asignado_a: '',
   });
 
@@ -201,35 +201,31 @@ const ITSoluciones: React.FC = () => {
     }
   };
 
+  const toast = (icon: 'success' | 'error' | 'warning' | 'info', title: string) =>
+    Swal.fire({ toast: true, position: 'top-end', icon, title, showConfirmButton: false, timer: 2800, timerProgressBar: true });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const ticketData = {
         ...formData,
-        // Para usuarios no IT, usar su email como solicitante
         solicitante: !isITUser && user?.email ? user.email : formData.solicitante,
-        // Para usuarios no IT, no asignar a nadie (IT lo hará después)
         asignado_a: !isITUser ? '' : formData.asignado_a
       };
-      
       if (editingTicket) {
         await ticketsService.actualizar(editingTicket.id, ticketData);
+        toast('success', 'Ticket actualizado correctamente');
       } else {
         await ticketsService.crear(ticketData);
+        toast('success', 'Ticket creado correctamente');
       }
       setShowModal(false);
       setEditingTicket(null);
-      setFormData({
-        titulo: '',
-        descripcion: '',
-        prioridad: 'media',
-        categoria: 'soporte_tecnico',
-        solicitante: '',
-        asignado_a: '',
-      });
+      setFormData({ titulo: '', descripcion: '', prioridad: 'media', categoria: 'soporte_tecnico', solicitante: user?.email || '', asignado_a: '' });
       cargarTickets();
     } catch (error) {
       console.error('Error al guardar ticket:', error);
+      toast('error', 'Error al guardar el ticket');
     }
   };
 
@@ -247,54 +243,72 @@ const ITSoluciones: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
+    const result = await Swal.fire({
+      title: '¿Eliminar ticket?',
+      text: 'Esta acción no se puede deshacer.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+    });
+    if (!result.isConfirmed) return;
     try {
       await ticketsService.eliminar(id);
+      toast('success', 'Ticket eliminado');
       cargarTickets();
     } catch (error) {
       console.error('Error al eliminar ticket:', error);
+      toast('error', 'Error al eliminar el ticket');
     }
   };
 
   const handleAssign = async (ticketId: number, email: string) => {
     try {
       await ticketsService.asignarTicket(ticketId, email);
+      toast('success', `Ticket asignado a ${email.split('@')[0]}`);
       cargarTickets();
       setAssignModal({ isOpen: false, ticketId: null, selectedEmail: '' });
     } catch (error) {
       console.error('Error al asignar ticket:', error);
-      alert('Error al asignar ticket. Verifica tus permisos e inténtalo nuevamente.');
+      toast('error', 'Error al asignar ticket. Verifica tus permisos.');
     }
+  };
+
+  const estadoLabel: Record<string, string> = {
+    abierto: 'Abierto', en_progreso: 'En Progreso', resuelto: 'Resuelto', cerrado: 'Cerrado'
   };
 
   const handleChangeStatus = async (ticketId: number, estado: 'abierto' | 'en_progreso' | 'resuelto' | 'cerrado') => {
     try {
       await ticketsService.cambiarEstado(ticketId, estado);
+      toast('success', `Estado cambiado a: ${estadoLabel[estado] ?? estado}`);
       cargarTickets();
       setStatusModal({ isOpen: false, ticketId: null, currentStatus: '', newStatus: '' });
     } catch (error) {
       console.error('Error al cambiar estado:', error);
+      toast('error', 'Error al cambiar el estado');
     }
   };
 
   // Funciones para comentarios
   const handleAddComment = async (ticketId: number) => {
     try {
-      // Validar permisos antes de agregar comentario
       const ticket = tickets.find(t => t.id === ticketId);
       if (!ticket || !canAddComment(ticket)) {
-        alert('No tienes permiso para agregar comentarios a este ticket.');
+        toast('warning', 'No tienes permiso para comentar en este ticket.');
         return;
       }
-      
       await ticketsService.agregarComentario(ticketId, commentModal.comentario);
       setCommentModal({ isOpen: false, ticketId: null, comentario: '' });
-      setTickets(prev =>
-        prev.map(t => (t.id === ticketId ? { ...t, comentarios: (t.comentarios || 0) + 1 } : t)),
-      );
-      cargarComentarios(ticketId); // Recargar comentarios
+      setTickets(prev => prev.map(t => (t.id === ticketId ? { ...t, comentarios: (t.comentarios || 0) + 1 } : t)));
+      toast('success', 'Comentario agregado');
+      cargarComentarios(ticketId);
+      if (showHistory[ticketId]) cargarHistorial(ticketId);
     } catch (error) {
       console.error('Error al agregar comentario:', error);
-      alert('Error al agregar comentario. Inténtalo nuevamente.');
+      toast('error', 'Error al agregar el comentario');
     }
   };
 
@@ -333,7 +347,7 @@ const ITSoluciones: React.FC = () => {
     });
     
     if (!puedeVerComentarios) {
-      alert('No tienes permiso para ver los comentarios de este ticket.');
+      toast('warning', 'No tienes permiso para ver los comentarios de este ticket.');
       return;
     }
     
@@ -450,14 +464,27 @@ const ITSoluciones: React.FC = () => {
 
   const getCategoriaColor = (categoria: string) => {
     switch (categoria) {
-      case 'hardware': return 'bg-blue-100 text-blue-800';
-      case 'software': return 'bg-purple-100 text-purple-800';
-      case 'red': return 'bg-orange-100 text-orange-800';
-      case 'acceso': return 'bg-indigo-100 text-indigo-800';
-      case 'sap': return 'bg-blue-100 text-blue-800';
-      case 'sitelink': return 'bg-teal-100 text-teal-800';
       case 'soporte_tecnico': return 'bg-gray-100 text-gray-800';
+      case 'planta_telefonica': return 'bg-cyan-100 text-cyan-800';
+      case 'office_correo': return 'bg-blue-100 text-blue-800';
+      case 'bitrix': return 'bg-violet-100 text-violet-800';
+      case 'callguru': return 'bg-pink-100 text-pink-800';
+      case 'sap': return 'bg-amber-100 text-amber-800';
+      case 'sitelink': return 'bg-teal-100 text-teal-800';
+      case 'red_internet': return 'bg-orange-100 text-orange-800';
+      case 'acceso_credenciales': return 'bg-indigo-100 text-indigo-800';
+      case 'otro': return 'bg-slate-100 text-slate-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getPrioridadBorder = (prioridad: string) => {
+    switch (prioridad?.toLowerCase()) {
+      case 'critica': return 'border-l-4 border-red-500';
+      case 'alta':    return 'border-l-4 border-orange-400';
+      case 'media':   return 'border-l-4 border-yellow-300';
+      case 'baja':    return 'border-l-4 border-green-400';
+      default:        return 'border-l-4 border-transparent';
     }
   };
 
@@ -538,12 +565,15 @@ const ITSoluciones: React.FC = () => {
             >
               <option value="">Todas las categorías</option>
               <option value="soporte_tecnico">Soporte Técnico</option>
-              <option value="hardware">Hardware</option>
-              <option value="software">Software</option>
-              <option value="red">Red</option>
-              <option value="acceso">Acceso</option>
+              <option value="planta_telefonica">Planta Telefónica</option>
+              <option value="office_correo">Office/Correo</option>
+              <option value="bitrix">Bitrix</option>
+              <option value="callguru">Callguru</option>
               <option value="sap">SAP</option>
               <option value="sitelink">SiteLink</option>
+              <option value="red_internet">Red/Internet</option>
+              <option value="acceso_credenciales">Acceso/Credenciales</option>
+              <option value="otro">Otro</option>
             </select>
             
             {/* Filtro de asignación - solo para personal IT */}
@@ -573,266 +603,8 @@ const ITSoluciones: React.FC = () => {
       </div>
 
       {/* Lista de Tickets */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        {/* Vista de tabla para desktop grande */}
-        <div className="hidden 2xl:block it-mobile-table overflow-x-auto">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Título</th>
-                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                  <th className="hidden md:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridad</th>
-                  <th className="hidden lg:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th>
-                  <th className="hidden lg:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Solicitante</th>
-                  <th className="hidden sm:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {loading ? (
-                  <tr>
-                    <td colSpan={8} className="px-6 py-4 text-center text-gray-500">
-                      Cargando tickets...
-                    </td>
-                  </tr>
-                ) : ticketsFiltrados.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-6 py-4 text-center text-gray-500">
-                      No se encontraron tickets
-                    </td>
-                  </tr>
-                ) : (
-                  ticketsFiltrados.map((ticket) => (
-                    <React.Fragment key={ticket.id}>
-                    <tr className="hover:bg-gray-50">
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">#{ticket.id}</td>
-                      <td className="px-3 sm:px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">{ticket.titulo}</div>
-                        <div className="text-sm text-gray-500 truncate max-w-xs">{ticket.descripcion}</div>
-                      </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          {getEstadoIcon(ticket.estado)}
-                          <span className="text-sm text-gray-900 capitalize">
-                            {ticket.estado.replace('_', ' ')}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="hidden md:table-cell px-3 sm:px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPrioridadColor(ticket.prioridad)}`}>
-                          {ticket.prioridad.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="hidden lg:table-cell px-3 sm:px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getCategoriaColor(ticket.categoria)}`}>
-                          {ticket.categoria?.replace('_', ' ').toUpperCase() || 'N/A'}
-                        </span>
-                      </td>
-                      <td className="hidden lg:table-cell px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ticket.solicitante}</td>
-                      <td className="hidden sm:table-cell px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(ticket.fecha_creacion).toLocaleDateString()}
-                      </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center gap-2">
-                          {canEditTickets && (
-                            <button
-                              onClick={() => handleEdit(ticket)}
-                              className="text-mrb-blue hover:text-mrb-blue/80"
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                          )}
-                          {canAssignTickets && (
-                            <button
-                              onClick={() => setAssignModal({ isOpen: true, ticketId: ticket.id, selectedEmail: '' })}
-                              className="text-green-600 hover:text-green-800"
-                            >
-                              <UserPlus size={16} />
-                            </button>
-                          )}
-                          {canChangeStatus && (
-                            <button
-                              onClick={() => setStatusModal({ isOpen: true, ticketId: ticket.id, currentStatus: ticket.estado, newStatus: '' })}
-                              className="text-blue-600 hover:text-blue-800"
-                            >
-                              <RotateCcw size={16} />
-                            </button>
-                          )}
-                          {!canComment && (
-                            <div className="text-gray-400 flex items-center gap-1" title="No tienes permiso para ver comentarios">
-                              <MessageSquare size={16} />
-                              <span className="text-xs">🔒</span>
-                            </div>
-                          )}
-                          {canComment && (
-                            <button
-                              onClick={() => toggleComments(ticket.id)}
-                              className="text-purple-600 hover:text-purple-800 flex items-center gap-1"
-                            >
-                              <MessageSquare size={16} />
-                              <span className="text-xs">
-                                {showComments[ticket.id]
-                                  ? comments.filter(comment => comment.ticket_id === ticket.id).length
-                                  : (ticket.comentarios ?? 0)}
-                              </span>
-                            </button>
-                          )}
-                          <button
-                            onClick={() => toggleHistory(ticket.id)}
-                            className="text-orange-600 hover:text-orange-800 flex items-center gap-1"
-                            title="Ver historial de cambios"
-                          >
-                            <History size={16} />
-                            <span className="text-xs">
-                              {showHistory[ticket.id]
-                                ? history.filter(item => item.ticket_id === ticket.id).length
-                                : (ticket.historial ?? 0)}
-                            </span>
-                          </button>
-                          {canDeleteTickets && (
-                            <button
-                              onClick={() => setDeleteConfirm({ isOpen: true, id: ticket.id })}
-                              className="text-red-600 hover:text-red-800"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                    {showHistory[ticket.id] && (
-                      <tr>
-                        <td colSpan={8} className="p-4 bg-white border-b">
-                          <div className="bg-white rounded-lg shadow-sm p-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className="font-medium text-gray-900">
-                                Ticket #{ticket.id} - {ticket.titulo}
-                              </h4>
-                              <span className="text-sm text-gray-500">
-                                Estado actual: <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPrioridadColor(ticket.estado)}`}>
-                                  {ticket.estado}
-                                </span>
-                              </span>
-                            </div>
-                            {history.filter(h => h.ticket_id === ticket.id).length > 0 ? (
-                              <div className="space-y-3 max-h-60 overflow-y-auto">
-                                {history.filter(h => h.ticket_id === ticket.id).map((item: any, index: number) => (
-                                  <div key={item.id || index} className="flex items-start gap-3">
-                                    <div className="flex flex-col items-center">
-                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${getHistorialEstadoColor(item.estado_nuevo)}`}>
-                                        {getHistorialEstadoIcon(item.estado_nuevo)}
-                                      </div>
-                                      {index < history.filter(h => h.ticket_id === ticket.id).length - 1 && (
-                                        <div className="w-0.5 h-16 bg-gray-300"></div>
-                                      )}
-                                    </div>
-                                    <div className="flex-1 bg-gray-50 rounded-lg p-3">
-                                      <div className="flex items-center justify-between mb-1">
-                                        <div className="flex items-center gap-2">
-                                          {item.estado_anterior && (
-                                            <>
-                                              <span className={`px-2 py-1 rounded text-xs font-medium ${getHistorialEstadoColor(item.estado_anterior)}`}>
-                                                {item.estado_anterior}
-                                              </span>
-                                              <span className="text-gray-400">→</span>
-                                            </>
-                                          )}
-                                          <span className={`px-2 py-1 rounded text-xs font-medium ${getHistorialEstadoColor(item.estado_nuevo)}`}>
-                                            {item.estado_nuevo}
-                                          </span>
-                                        </div>
-                                        <div className="text-xs text-gray-500">
-                                          {item.usuario?.nombre || item.usuario?.email || 'Usuario'} - {item.fecha_cambio ? new Date(item.fecha_cambio).toLocaleString() : ''}
-                                        </div>
-                                      </div>
-                                      {item.comentario && (
-                                        <p className="text-sm text-gray-600 mt-1">{item.comentario}</p>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-gray-500 text-sm text-center py-4">No hay cambios registrados en el historial</p>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                    {/* Comentarios integrados en tabla */}
-                    {showComments[ticket.id] && (
-                      <tr>
-                        <td colSpan={8} className="p-4 bg-purple-50 border-b">
-                          <div className="bg-white rounded-lg shadow-sm p-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className="font-medium text-gray-900">Comentarios del Ticket #{ticket.id}</h4>
-                            </div>
-                            {comments.filter(c => c.ticket_id === ticket.id).length > 0 ? (
-                              <div className="space-y-2 max-h-60 overflow-y-auto">
-                                {comments.filter(c => c.ticket_id === ticket.id).map((c: any) => (
-                                  <div key={c.id} className="bg-gray-50 p-3 rounded border">
-                                    <div className="flex items-center justify-between mb-1">
-                                      <span className="font-medium text-sm">
-                                        {c.usuario?.nombre || c.usuario?.email || 'Usuario'}
-                                      </span>
-                                      <span className="text-xs text-gray-500">
-                                        {c.fecha_creacion ? new Date(c.fecha_creacion).toLocaleString() : ''}
-                                      </span>
-                                    </div>
-                                    <p className="text-sm text-gray-700">{c.comentario}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-gray-500 text-sm">No hay comentarios aún.</p>
-                            )}
-                            {canAddComment(ticket) && (
-                              <div className="mt-3 flex gap-2">
-                                <input
-                                  type="text"
-                                  id={`comment-input-${ticket.id}`}
-                                  placeholder="Agregar un comentario..."
-                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                                  onKeyPress={(e) => {
-                                    if (e.key === 'Enter') {
-                                      const input = document.getElementById(`comment-input-${ticket.id}`) as HTMLInputElement;
-                                      if (input.value.trim()) {
-                                        setCommentModal({ isOpen: true, ticketId: ticket.id, comentario: input.value });
-                                        input.value = '';
-                                      }
-                                    }
-                                  }}
-                                />
-                                <button
-                                  onClick={() => {
-                                    const input = document.getElementById(`comment-input-${ticket.id}`) as HTMLInputElement;
-                                    if (input.value.trim()) {
-                                      setCommentModal({ isOpen: true, ticketId: ticket.id, comentario: input.value });
-                                      input.value = '';
-                                    }
-                                  }}
-                                  className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700"
-                                >
-                                  Enviar
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Vista de tarjetas para móvil, tablets y laptops */}
-        <div className="2xl:hidden" style={{ display: 'block' }}>
+      <div className="bg-white rounded-lg shadow-sm">
+        <div>
           {loading ? (
             <div className="p-6 text-center text-gray-500">
               Cargando tickets...
@@ -842,104 +614,78 @@ const ITSoluciones: React.FC = () => {
               No se encontraron tickets
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="divide-y divide-gray-100">
               {ticketsFiltrados.map((ticket) => (
-                <div key={ticket.id} className="it-ticket-card">
-                  <div className="it-ticket-header">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-500">#{ticket.id}</span>
-                      <span className={`it-ticket-badge ${getPrioridadColor(ticket.prioridad)}`}>
-                        {ticket.prioridad.toUpperCase()}
-                      </span>
+                <div key={ticket.id} className={`p-4 md:py-3 hover:bg-gray-50 transition-colors ${getPrioridadBorder(ticket.prioridad)}`}>
+                  <div className="flex flex-col md:flex-row md:items-start md:gap-6">
+                    {/* Columna izquierda: ID + Título + Descripción */}
+                    <div className="flex-1 min-w-0 mb-2 md:mb-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-xs font-semibold text-gray-400">#{ticket.id}</span>
+                        <span className="text-xs text-gray-400 md:hidden">{new Date(ticket.fecha_creacion).toLocaleDateString()}</span>
+                      </div>
+                      <div className="text-sm font-semibold text-gray-900 truncate">{ticket.titulo}</div>
+                      <div className="text-xs text-gray-500 line-clamp-2 mt-0.5">{ticket.descripcion}</div>
                     </div>
-                    <h3 className="it-ticket-title">{ticket.titulo}</h3>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="it-ticket-meta">
-                      <div className="flex items-center gap-1">
-                        {getEstadoIcon(ticket.estado)}
-                        <span className="text-sm text-gray-900 capitalize">
-                          {ticket.estado.replace('_', ' ')}
+                    {/* Columna derecha: fecha (md+) + badges + solicitante + botones */}
+                    <div className="flex flex-col gap-1.5 md:items-end md:shrink-0 md:min-w-[260px]">
+                      <span className="hidden md:block text-xs text-gray-400 self-end">
+                        {new Date(ticket.fecha_creacion).toLocaleDateString()}
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <div className="flex items-center gap-1">
+                          {getEstadoIcon(ticket.estado)}
+                          <span className="text-xs text-gray-700 capitalize">{ticket.estado.replace('_', ' ')}</span>
+                        </div>
+                        <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getPrioridadColor(ticket.prioridad)}`}>
+                          {ticket.prioridad.toUpperCase()}
+                        </span>
+                        <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getCategoriaColor(ticket.categoria)}`}>
+                          {ticket.categoria?.replace('_', ' ').toUpperCase() || 'N/A'}
                         </span>
                       </div>
-                      <div className="text-sm text-gray-500">
-                        {new Date(ticket.fecha_creacion).toLocaleDateString()}
+                      <div className="text-xs text-gray-500">
+                        {ticket.solicitante}
+                        {ticket.asignado_a && <span className="ml-2 text-gray-400">→ {ticket.asignado_a}</span>}
                       </div>
-                    </div>
-                    
-                    <div className="text-sm text-gray-700">
-                      <p><strong>Solicitante:</strong> {ticket.solicitante}</p>
-                      {ticket.asignado_a && (
-                        <p><strong>Asignado a:</strong> {ticket.asignado_a}</p>
-                      )}
-                    </div>
-                    
-                    <div className="it-ticket-actions">
-                      {canEditTickets && (
-                        <button
-                          onClick={() => handleEdit(ticket)}
-                          className="it-ticket-action-btn text-mrb-blue hover:text-mrb-blue/80"
-                          title="Editar"
-                        >
-                          <Edit2 size={16} />
+                      <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                        {canEditTickets && (
+                          <button onClick={() => handleEdit(ticket)} title="Editar"
+                            className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
+                            <Edit2 size={15} />
+                          </button>
+                        )}
+                        {canAssignTickets && (
+                          <button onClick={() => setAssignModal({ isOpen: true, ticketId: ticket.id, selectedEmail: '' })} title="Asignar"
+                            className="p-2 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors">
+                            <UserPlus size={15} />
+                          </button>
+                        )}
+                        {canChangeStatus && (
+                          <button onClick={() => setStatusModal({ isOpen: true, ticketId: ticket.id, currentStatus: ticket.estado, newStatus: '' })} title="Cambiar estado"
+                            className="p-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors">
+                            <RotateCcw size={15} />
+                          </button>
+                        )}
+                        <button onClick={() => toggleHistory(ticket.id)} title="Historial"
+                          className="p-2 rounded-lg bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors flex items-center gap-1">
+                          <History size={15} />
+                          <span className="text-xs font-medium">{showHistory[ticket.id] ? history.filter(h => h.ticket_id === ticket.id).length : (ticket.historial ?? 0)}</span>
                         </button>
-                      )}
-                      {canAssignTickets && (
-                        <button
-                          onClick={() => setAssignModal({ isOpen: true, ticketId: ticket.id, selectedEmail: '' })}
-                          className="it-ticket-action-btn text-green-600 hover:text-green-800"
-                          title="Asignar"
-                        >
-                          <UserPlus size={16} />
-                        </button>
-                      )}
-                      {canChangeStatus && (
-                        <button
-                          onClick={() => setStatusModal({ isOpen: true, ticketId: ticket.id, currentStatus: ticket.estado, newStatus: '' })}
-                          className="it-ticket-action-btn text-orange-600 hover:text-orange-800"
-                          title="Cambiar estado"
-                        >
-                          <RotateCcw size={16} />
-                        </button>
-                      )}
-                      {canViewHistory && (
-                        <button
-                          onClick={() => toggleHistory(ticket.id)}
-                          className="text-orange-600 hover:text-orange-800 p-1"
-                          title="Historial"
-                        >
-                          <History size={16} />
-                          <span className="ml-1 text-xs">
-                            {showHistory[ticket.id]
-                              ? history.filter(item => item.ticket_id === ticket.id).length
-                              : (ticket.historial ?? 0)}
-                          </span>
-                        </button>
-                      )}
-                      {canComment && (
-                        <button
-                          onClick={() => toggleComments(ticket.id)}
-                          className="text-purple-600 hover:text-purple-800 p-1"
-                          title="Ver comentarios"
-                        >
-                          <MessageSquare size={16} />
-                          <span className="ml-1 text-xs">
-                            {showComments[ticket.id]
-                              ? comments.filter(c => c.ticket_id === ticket.id).length
-                              : (ticket.comentarios ?? 0)}
-                          </span>
-                        </button>
-                      )}
-                      {canDeleteTickets && (
-                        <button
-                          onClick={() => setDeleteConfirm({ isOpen: true, id: ticket.id })}
-                          className="text-red-600 hover:text-red-800 p-1"
-                          title="Eliminar"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
+                        {canComment && (
+                          <button onClick={() => toggleComments(ticket.id)} title="Comentarios"
+                            className="p-2 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors flex items-center gap-1">
+                            <MessageSquare size={15} />
+                            <span className="text-xs font-medium">{showComments[ticket.id] ? comments.filter(c => c.ticket_id === ticket.id).length : (ticket.comentarios ?? 0)}</span>
+                          </button>
+                        )}
+                        {canDeleteTickets && (
+                          <button onClick={() => handleDelete(ticket.id)} title="Eliminar"
+                            className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                   {/* Historial integrado en vista de tarjetas */}
@@ -995,7 +741,7 @@ const ITSoluciones: React.FC = () => {
                         <div className="space-y-2 max-h-40 overflow-y-auto">
                           {comments.filter(c => c.ticket_id === ticket.id).map((c: any) => (
                             <div key={c.id} className="bg-white p-2 rounded text-sm">
-                              <div className="font-medium text-xs">{c.usuario?.nombre || c.usuario?.email || 'Usuario'}</div>
+                              <div className="font-medium text-xs">{c.nombre_usuario || c.usuario_email || 'Usuario'}</div>
                               <p className="text-gray-700">{c.comentario}</p>
                             </div>
                           ))}
@@ -1138,12 +884,15 @@ const ITSoluciones: React.FC = () => {
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mrb-blue focus:border-transparent"
                         >
                           <option value="soporte_tecnico">Soporte Técnico</option>
-                          <option value="hardware">Hardware</option>
-                          <option value="software">Software</option>
-                          <option value="red">Red</option>
-                          <option value="acceso">Acceso</option>
+                          <option value="planta_telefonica">Planta Telefónica</option>
+                          <option value="office_correo">Office/Correo</option>
+                          <option value="bitrix">Bitrix</option>
+                          <option value="callguru">Callguru</option>
                           <option value="sap">SAP</option>
                           <option value="sitelink">SiteLink</option>
+                          <option value="red_internet">Red/Internet</option>
+                          <option value="acceso_credenciales">Acceso/Credenciales</option>
+                          <option value="otro">Otro</option>
                         </select>
                       </div>
                     </div>
@@ -1152,9 +901,9 @@ const ITSoluciones: React.FC = () => {
                       <input
                         type="text"
                         required
+                        readOnly
                         value={formData.solicitante}
-                        onChange={(e) => setFormData({ ...formData, solicitante: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mrb-blue focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
                       />
                     </div>
                     {canManageIT && (
@@ -1198,22 +947,7 @@ const ITSoluciones: React.FC = () => {
         </div>
       )}
 
-      {/* Modal de Confirmación para Eliminar */}
-      <ConfirmModal
-        isOpen={deleteConfirm.isOpen}
-        onClose={() => setDeleteConfirm({ isOpen: false, id: null })}
-        onConfirm={() => {
-          if (deleteConfirm.id) {
-            handleDelete(deleteConfirm.id);
-          }
-          setDeleteConfirm({ isOpen: false, id: null });
-        }}
-        title="Eliminar Ticket"
-        message="¿Estás seguro que deseas eliminar este ticket? Esta acción no se puede deshacer."
-        confirmText="Eliminar"
-        cancelText="Cancelar"
-        type="danger"
-      />
+      {/* Eliminación con Swal — no se necesita modal separado */}
 
       {/* Modal para Asignar Ticket */}
       {assignModal.isOpen && (
