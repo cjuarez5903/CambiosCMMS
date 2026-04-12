@@ -216,6 +216,9 @@ echo "[6/6] Compilando y ejecutando migraciones..."
 
 cd $BACKEND
 
+echo "      → npm install..."
+npm install --silent || rollback
+
 echo "      → npm run build..."
 npm run build || rollback
 
