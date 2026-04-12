@@ -1,13 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like } from 'typeorm';
-import { ITTicket } from '../../entities/it-ticket.entity';
-import { ITTicketComentario } from './entities/it-ticket-comentario.entity';
-import { ITTicketHistorial } from './entities/it-ticket-historial.entity';
+import { Repository } from 'typeorm';
+import { ITTicket } from './entities/it-ticket.entity';
 import { CreateITTicketDto } from './dto/create-it-ticket.dto';
 import { UpdateITTicketDto } from './dto/update-it-ticket.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
-import { EmailService } from '../email/email.service';
 import * as mysql from 'mysql2/promise';
 import { config } from 'dotenv';
 
@@ -18,7 +15,7 @@ const configService = {
 };
 
 // Crear pool de conexiones MySQL
-const pool = mysql.createPool({
+export const pool = mysql.createPool({
   host: configService.get('DB_HOST'),
   port: parseInt(configService.get('DB_PORT')) || 3306,
   user: configService.get('DB_USERNAME'),
@@ -26,7 +23,8 @@ const pool = mysql.createPool({
   database: configService.get('DB_DATABASE'),
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  ssl: { rejectUnauthorized: false },
 });
 
 @Injectable()
@@ -34,273 +32,158 @@ export class ITTicketsService {
   constructor(
     @InjectRepository(ITTicket)
     private readonly itTicketRepository: Repository<ITTicket>,
-    @InjectRepository(ITTicketComentario)
-    private readonly comentarioRepository: Repository<ITTicketComentario>,
-    @InjectRepository(ITTicketHistorial)
-    private readonly historialRepository: Repository<ITTicketHistorial>,
-    private readonly emailService: EmailService,
   ) {}
 
-  private async getAdminITEmail(): Promise<string | null> {
+  async obtenerEstadisticas(params?: { asignado_a?: string }, user?: any): Promise<any> {
     try {
-      const [rows] = await pool.query<any[]>(
-        `SELECT u.email FROM usuarios u INNER JOIN roles r ON r.id = u.rol_id WHERE r.nombre = 'Administrador IT' LIMIT 1`,
-      );
-      return rows?.[0]?.email || null;
-    } catch {
-      return null;
-    }
-  }
+      console.log('🔍 obtenerEstadisticas llamado con params:', params);
+      console.log('🔍 obtenerEstadisticas llamado con user:', user);
+      
+      // Determinar si debe filtrar por asignado_a
+      const isAdmin = user?.permisos?.todo === true && user?.rol?.nombre === 'Administrador';
+      const esAdminIT = user?.rol?.nombre === 'Administrador IT';
+      const esTecnicoIT = user?.rol?.nombre === 'Técnico IT';
+      
+      console.log('🔍 Roles detectados:', { isAdmin, esAdminIT, esTecnicoIT });
+      
+      // Solo Administrador y Administrador IT ven todas las estadísticas
+      // Técnico IT ve solo sus estadísticas personales
+      const usarFiltroAsignado = !isAdmin && !esAdminIT && params?.asignado_a;
+      
+      const asignadoFilter = usarFiltroAsignado ? 'AND asignado_a = ?' : '';
+      const asignadoParam = usarFiltroAsignado ? params?.asignado_a : null;
+      
+      console.log('🔍 Filtros:', { usarFiltroAsignado, asignadoFilter, asignadoParam });
 
-  private async resolveUsuarioId(user?: any): Promise<number | null> {
-    if (!user) return null;
-
-    const directId = user?.id ?? user?.userId ?? user?.sub;
-    if (typeof directId === 'number' && Number.isFinite(directId)) return directId;
-    if (typeof directId === 'string' && directId.trim() !== '' && !Number.isNaN(Number(directId))) {
-      return Number(directId);
-    }
-
-    const email = user?.email;
-    if (typeof email !== 'string' || email.trim() === '') return null;
-    const normalizedEmail = email.toLowerCase().trim();
-
-    try {
-      const [rows] = await pool.query<any[]>(
-        'SELECT id FROM usuarios WHERE LOWER(email) = ? LIMIT 1',
-        [normalizedEmail],
-      );
-      const id = rows?.[0]?.id;
-      if (typeof id === 'number' && Number.isFinite(id)) return id;
-      return null;
-    } catch (e) {
-      console.error('Error resolviendo usuarioId por email:', e);
-      return null;
-    }
-  }
-
-  async obtenerConteoComentarios(ids: string | undefined, user?: any): Promise<Record<string, number>> {
-    try {
-      const userEmail = (user?.email || '').toLowerCase().trim();
-      if (!userEmail) return {};
-
-      const isAdmin = user?.permisos?.todo === true || user?.rol?.permisos?.todo === true;
-      const isIT = user?.rol?.permisos?.rutas?.includes('it_soluciones') || false;
-
-      const parsedIds = String(ids || '')
-        .split(',')
-        .map(x => Number(String(x).trim()))
-        .filter(n => Number.isFinite(n) && n > 0);
-
-      if (parsedIds.length === 0) return {};
-
-      const placeholders = parsedIds.map(() => '?').join(',');
-      const params: any[] = [...parsedIds];
-
-      let sql = `
-        SELECT c.ticket_id AS ticketId, COUNT(*) AS total
-        FROM it_ticket_comentarios c
-        INNER JOIN it_tickets t ON t.id = c.ticket_id
-        WHERE c.ticket_id IN (${placeholders})
+      // Estadísticas generales
+      const estadisticasQuery = `
+        SELECT 
+          COUNT(CASE WHEN estado = 'abierto' THEN 1 END) as abiertos,
+          COUNT(CASE WHEN estado = 'en_progreso' THEN 1 END) as enProgreso,
+          COUNT(CASE WHEN estado = 'resuelto' THEN 1 END) as resueltos,
+          COUNT(CASE WHEN estado = 'cerrado' THEN 1 END) as cerrados,
+          COUNT(CASE WHEN prioridad = 'critica' THEN 1 END) as criticos,
+          COUNT(CASE WHEN DATE(fecha_actualizacion) = CURDATE() AND estado IN ('resuelto', 'cerrado') THEN 1 END) as resueltosHoy,
+          COUNT(CASE WHEN asignado_a IS NOT NULL AND asignado_a != '' THEN 1 END) as ticketsAsignados,
+          COUNT(*) as totalTickets
+        FROM it_tickets
+        WHERE 1=1 ${asignadoFilter}
       `;
 
-      if (!isAdmin && !isIT) {
-        sql += ` AND (LOWER(t.solicitante) = ? OR LOWER(t.asignado_a) = ?) `;
-        params.push(userEmail, userEmail);
-      }
+      console.log('🔍 Estadísticas Query:', estadisticasQuery);
+      console.log('🔍 Estadísticas Params:', asignadoParam ? [asignadoParam] : []);
 
-      sql += ` GROUP BY c.ticket_id `;
+      const [estadisticasRows] = await pool.query(estadisticasQuery, asignadoParam ? [asignadoParam] : []) as [any[], any];
+      const estadisticas = estadisticasRows[0];
+      
+      console.log('🔍 Estadísticas generales:', estadisticas);
 
-      const [rows] = await pool.query<any[]>(sql, params);
-      const result: Record<string, number> = {};
-      for (const r of rows || []) {
-        result[String(r.ticketId)] = Number(r.total) || 0;
-      }
-      // Asegurar que tickets sin comentarios regresen 0
-      for (const id of parsedIds) {
-        const key = String(id);
-        if (result[key] === undefined) result[key] = 0;
-      }
-      return result;
-    } catch (error) {
-      console.error('Error al obtener conteo de comentarios:', error);
-      return {};
-    }
-  }
-
-  async obtenerConteoHistorial(ids: string | undefined, user?: any): Promise<Record<string, number>> {
-    try {
-      const userEmail = (user?.email || '').toLowerCase().trim();
-      if (!userEmail) return {};
-
-      const isAdmin = user?.permisos?.todo === true || user?.rol?.permisos?.todo === true;
-      const isIT = user?.rol?.permisos?.rutas?.includes('it_soluciones') || false;
-
-      const parsedIds = String(ids || '')
-        .split(',')
-        .map(x => Number(String(x).trim()))
-        .filter(n => Number.isFinite(n) && n > 0);
-
-      if (parsedIds.length === 0) return {};
-
-      const placeholders = parsedIds.map(() => '?').join(',');
-      const params: any[] = [...parsedIds];
-
-      let sql = `
-        SELECT h.ticket_id AS ticketId, COUNT(*) AS total
-        FROM it_ticket_historial h
-        INNER JOIN it_tickets t ON t.id = h.ticket_id
-        WHERE h.ticket_id IN (${placeholders})
+      // Estadísticas por categoría - usando la vista
+      const categoriasQuery = `
+        SELECT categoria, SUM(cantidad) as value
+        FROM v_it_tickets_por_categoria_estado
+        WHERE categoria IS NOT NULL AND categoria != ''
+        ${asignadoFilter}
+        GROUP BY categoria
+        ORDER BY value DESC
       `;
+      console.log('🔍 Categorías Query:', categoriasQuery);
+      console.log('🔍 Categorías Params:', asignadoParam ? [asignadoParam] : []);
+      const [categoriasRows] = await pool.query(categoriasQuery, asignadoParam ? [asignadoParam] : []) as [any[], any];
+      console.log('🔍 Categorías Result:', categoriasRows);
 
-      if (!isAdmin && !isIT) {
-        sql += ` AND (LOWER(t.solicitante) = ? OR LOWER(t.asignado_a) = ?) `;
-        params.push(userEmail, userEmail);
-      }
+      // Estadísticas por prioridad - simplificado
+      const prioridadesQuery = `
+        SELECT prioridad, COUNT(*) as value
+        FROM it_tickets
+        WHERE prioridad IS NOT NULL AND prioridad != ''
+        ${asignadoFilter}
+        GROUP BY prioridad
+        ORDER BY 
+          CASE prioridad
+            WHEN 'critica' THEN 1
+            WHEN 'alta' THEN 2
+            WHEN 'media' THEN 3
+            WHEN 'baja' THEN 4
+          END
+      `;
+      console.log('🔍 Prioridades Query:', prioridadesQuery);
+      const [prioridadesRows] = await pool.query(prioridadesQuery, asignadoParam ? [asignadoParam] : []) as [any[], any];
+      console.log('🔍 Prioridades Result:', prioridadesRows);
 
-      sql += ` GROUP BY h.ticket_id `;
+      // Procesar datos para el frontend
+      const porCategoria = {
+        soporte_tecnico: categoriasRows.find((c: any) => c.categoria === 'soporte_tecnico')?.value || 0,
+        planta_telefonica: categoriasRows.find((c: any) => c.categoria === 'planta_telefonica')?.value || 0,
+        office_correo: categoriasRows.find((c: any) => c.categoria === 'office_correo')?.value || 0,
+        bitrix: categoriasRows.find((c: any) => c.categoria === 'bitrix')?.value || 0,
+        callguru: categoriasRows.find((c: any) => c.categoria === 'callguru')?.value || 0,
+        sap: categoriasRows.find((c: any) => c.categoria === 'sap')?.value || 0,
+        sitelink: categoriasRows.find((c: any) => c.categoria === 'sitelink')?.value || 0,
+        red_internet: categoriasRows.find((c: any) => c.categoria === 'red_internet')?.value || 0,
+        acceso_credenciales: categoriasRows.find((c: any) => c.categoria === 'acceso_credenciales')?.value || 0,
+        otro: categoriasRows.find((c: any) => c.categoria === 'otro')?.value || 0,
+      };
 
-      const [rows] = await pool.query<any[]>(sql, params);
-      const result: Record<string, number> = {};
-      for (const r of rows || []) {
-        result[String(r.ticketId)] = Number(r.total) || 0;
-      }
-      // Asegurar que tickets sin historial regresen 0
-      for (const id of parsedIds) {
-        const key = String(id);
-        if (result[key] === undefined) result[key] = 0;
-      }
+      const porPrioridad = {
+        critica: prioridadesRows.find((p: any) => p.prioridad === 'critica')?.value || 0,
+        alta: prioridadesRows.find((p: any) => p.prioridad === 'alta')?.value || 0,
+        media: prioridadesRows.find((p: any) => p.prioridad === 'media')?.value || 0,
+        baja: prioridadesRows.find((p: any) => p.prioridad === 'baja')?.value || 0,
+      };
+
+      console.log('🔍 porCategoria procesado:', porCategoria);
+      console.log('🔍 porPrioridad procesado:', porPrioridad);
+
+      const result = {
+        abiertos: estadisticas.abiertos || 0,
+        enProgreso: estadisticas.enProgreso || 0,
+        resueltos: estadisticas.resueltos || 0,
+        cerrados: estadisticas.cerrados || 0,
+        criticos: estadisticas.criticos || 0,
+        resueltosHoy: estadisticas.resueltosHoy || 0,
+        ticketsAsignados: estadisticas.ticketsAsignados || 0,
+        totalTickets: estadisticas.totalTickets || 0,
+        porCategoria,
+        porPrioridad,
+      };
+
+      console.log('🔍 Resultado final:', result);
+      
       return result;
     } catch (error) {
-      console.error('Error al obtener conteo de historial:', error);
-      return {};
+      console.error('❌ Error en obtenerEstadisticas:', error);
+      return {
+        abiertos: 0,
+        enProgreso: 0,
+        resueltos: 0,
+        cerrados: 0,
+        criticos: 0,
+        resueltosHoy: 0,
+        ticketsAsignados: 0,
+        totalTickets: 0,
+        porCategoria: {
+          soporte_tecnico: 0,
+          hardware: 0,
+          software: 0,
+          red: 0,
+          acceso: 0,
+          sap: 0,
+          sitelink: 0,
+        },
+        porPrioridad: {
+          critica: 0,
+          alta: 0,
+          media: 0,
+          baja: 0,
+        },
+      };
     }
   }
 
-  async create(createITTicketDto: CreateITTicketDto, user?: any): Promise<ITTicket> {
-    // If user is not IT and asignado_a is set, remove it
-    if (createITTicketDto.asignado_a && !this.isITUser(user)) {
-      createITTicketDto.asignado_a = null;
-    }
-
-    const ticket = this.itTicketRepository.create(createITTicketDto);
-    const savedTicket = await this.itTicketRepository.save(ticket);
-
-    // Registrar en historial
-    await this.guardarHistorial(savedTicket.id, null, savedTicket.estado, await this.resolveUsuarioId(user), 'Ticket creado');
-
-    // Notificar: solicitante (confirmación) + Administrador IT (nuevo ticket)
-    this.getAdminITEmail().then(adminEmail => {
-      const destinatarios = [createITTicketDto.solicitante, adminEmail].filter(Boolean);
-      this.emailService.enviarNuevoTicketIT({
-        ticketId: savedTicket.id,
-        titulo: savedTicket.titulo,
-        descripcion: savedTicket.descripcion,
-        prioridad: savedTicket.prioridad,
-        categoria: savedTicket.categoria,
-        solicitante: savedTicket.solicitante,
-        destinatarios,
-      }).catch(() => {});
-    }).catch(() => {});
-
-    return savedTicket;
-  }
-
-  private isITUser(user: any): boolean {
-    console.log('🔍 isITUser() called with:', {
-      hasUser: !!user,
-      hasRol: !!user?.rol,
-      hasRolPermisos: !!user?.rol?.permisos,
-      permisos: user?.rol?.permisos,
-      email: user?.email
-    });
-    
-    if (!user || !user.rol || !user.rol.permisos) {
-      console.log('❌ isITUser: false - No hay usuario o permisos');
-      return false;
-    }
-    
-    const permisos = user.rol.permisos;
-    
-    // IT users have 'it_soluciones' in their routes
-    const hasITSolutionsAccess = permisos.rutas && 
-                               Array.isArray(permisos.rutas) && 
-                               permisos.rutas.includes('it_soluciones');
-    
-    // IT users should NOT have 'todo: true' (that's admin)
-    const isNotAdmin = permisos.todo !== true;
-    
-    const result = hasITSolutionsAccess && isNotAdmin;
-    
-    console.log('🔍 isITUser() result:', {
-      hasITSolutionsAccess,
-      isNotAdmin,
-      finalResult: result,
-      permisos: permisos
-    });
-    
-    return result;
-  }
-
-  private isAdminUser(user: any): boolean {
-    if (!user) return false;
-    
-    console.log('🔍 isAdminUser check:', {
-      hasUser: !!user,
-      hasPermisos: !!user.permisos,
-      permisosTodo: user.permisos?.todo,
-      hasRol: !!user.rol,
-      hasRolPermisos: !!user.rol?.permisos,
-      rolPermisosTodo: user.rol?.permisos?.todo
-    });
-    
-    // Check direct permissions first
-    if (user.permisos && user.permisos.todo === true) {
-      console.log('✅ Admin detected via direct permissions');
-      return true;
-    }
-    
-    // Check role permissions
-    if (user.rol && user.rol.permisos && user.rol.permisos.todo === true) {
-      console.log('✅ Admin detected via role permissions');
-      return true;
-    }
-    
-    console.log('❌ Not admin detected');
-    return false;
-  }
-
-  private async getRolFromDB(userId: number): Promise<{ nombre: string; permisos: any } | null> {
+  async findAll(paginationDto: PaginationDto, busqueda?: string, asignado_a?: string, user?: any, estado?: string, prioridad?: string, categoria?: string, estado_excluir?: string, estado_incluir?: string, sin_asignar?: boolean, con_asignar?: boolean): Promise<any> {
     try {
-      const [rows] = await pool.query<any[]>(
-        `SELECT r.nombre, r.permisos
-         FROM usuarios u
-         INNER JOIN roles r ON r.id = u.rol_id
-         WHERE u.id = ? LIMIT 1`,
-        [userId],
-      );
-      return rows?.[0] || null;
-    } catch {
-      return null;
-    }
-  }
-
-  async findAll(
-    paginationDto: PaginationDto,
-    busqueda?: string,
-    asignado_a?: string,
-    user?: any,
-    estado?: string,
-    prioridad?: string,
-    categoria?: string,
-    estado_excluir?: string,
-    estado_incluir?: string,
-    sin_asignar?: boolean,
-    con_asignar?: boolean
-  ): Promise<any> {
-    try {
-      const pagina = paginationDto?.pagina || 1;
-      const porPagina = paginationDto?.porPagina || 10;
+      const { pagina, porPagina } = paginationDto;
       const skip = (pagina - 1) * porPagina;
 
       // Obtener rol real desde BD (el JWT solo trae sub/email/rolId)
@@ -312,15 +195,13 @@ export class ITTicketsService {
       let params: any[] = [];
 
       // Solo Administrador IT ve todos los tickets
-      const isAdminIT = rol?.nombre === 'Administrador IT';
+      const canVerTodos = rol?.nombre === 'Administrador IT';
+      const esTecnicoIT = rol?.nombre === 'Técnico IT';
+      const esUsuarioIT = user?.rol?.permisos?.rutas?.includes('it_soluciones') || false;
 
-      // Técnico IT ve solo los asignados a él
-      const isIT = rol?.nombre === 'Técnico IT';
-
-      if (isAdminIT) {
-        // Administrador IT — ve todos los tickets
-      } else if (isIT) {
-        // Técnico IT — solo ve los tickets asignados a él
+      if (canVerTodos) {
+        // no filter
+      } else if (esTecnicoIT) {
         whereClause = ' WHERE asignado_a = ?';
         params.push(user?.email);
       } else {
@@ -350,11 +231,6 @@ export class ITTicketsService {
       if (categoria) {
         filtros.push('categoria = ?');
         params.push(categoria);
-      }
-      
-      if (asignado_a) {
-        filtros.push('asignado_a = ?');
-        params.push(asignado_a);
       }
       
       if (estado_excluir) {
@@ -388,7 +264,7 @@ export class ITTicketsService {
       
       // Construir consulta SQL completa
       const sqlQuery = `
-        SELECT id, titulo, descripcion, estado, prioridad, categoria, solicitante, asignado_a, fecha_creacion, fecha_actualizacion
+        SELECT id, titulo, descripcion, estado, prioridad, categoria, solicitante, asignado_a, fecha_creacion, fecha_actualizacion, fecha_resolucion, creado_por, actualizado_por
         FROM it_tickets${whereClause}
         ORDER BY fecha_creacion DESC
         LIMIT ? OFFSET ?
@@ -400,17 +276,93 @@ export class ITTicketsService {
       // Ejecutar consulta usando el pool de MySQL directo
       const connection = await pool.getConnection();
       const [tickets] = await connection.query(sqlQuery, params);
+      
+      console.log('🔍 SQL Query:', sqlQuery);
+      console.log('🔍 SQL Params:', params);
+      console.log('🔍 Raw tickets from DB:', tickets);
+      console.log('🔍 Tickets length:', Array.isArray(tickets) ? tickets.length : 'Not an array');
+
+      // Mapear resultados al formato ITTicket
+      const ticketsFormateados = (tickets as any[]).map(ticket => ({
+        id: ticket.id,
+        titulo: ticket.titulo,
+        descripcion: ticket.descripcion,
+        estado: ticket.estado,
+        prioridad: ticket.prioridad,
+        categoria: ticket.categoria,
+        solicitante: ticket.solicitante,
+        asignado_a: ticket.asignado_a,
+        fecha_creacion: ticket.fecha_creacion,
+        fecha_actualizacion: ticket.fecha_actualizacion,
+        fecha_resolucion: ticket.fecha_resolucion,
+        creado_por: ticket.creado_por,
+        actualizado_por: ticket.actualizado_por
+      }));
+      
+      console.log('🔍 Formatted tickets:', ticketsFormateados);
+      console.log('🔍 Formatted tickets length:', ticketsFormateados?.length);
 
       // Conteo total con las mismas condiciones de acceso
       let countParams: any[] = [];
       let countConditions = '';
-
-      if (isIT) {
+      if (canVerTodos || esTecnicoIT) {
+        // no filter
+      } else if (esUsuarioIT) {
         countConditions = ' WHERE asignado_a = ?';
         countParams.push(user?.email);
-      } else if (!isAdminIT) {
+      } else {
         countConditions = ' WHERE solicitante = ?';
         countParams.push(user?.email);
+      }
+
+      // Aplicar mismos filtros al conteo
+      const countFiltros = [];
+      if (busqueda) {
+        countFiltros.push('(titulo LIKE ? OR descripcion LIKE ? OR solicitante LIKE ?)');
+        countParams.push(`%${busqueda}%`, `%${busqueda}%`, `%${busqueda}%`);
+      }
+      
+      if (estado) {
+        countFiltros.push('estado = ?');
+        countParams.push(estado);
+      }
+      
+      if (prioridad) {
+        countFiltros.push('prioridad = ?');
+        countParams.push(prioridad);
+      }
+      
+      if (categoria) {
+        countFiltros.push('categoria = ?');
+        countParams.push(categoria);
+      }
+      
+      if (estado_excluir) {
+        const estadosExcluir = estado_excluir.split(',');
+        countFiltros.push(`estado NOT IN (${estadosExcluir.map(() => '?').join(',')})`);
+        countParams.push(...estadosExcluir);
+      }
+      
+      if (estado_incluir) {
+        const estadosIncluir = estado_incluir.split(',');
+        countFiltros.push(`estado IN (${estadosIncluir.map(() => '?').join(',')})`);
+        countParams.push(...estadosIncluir);
+      }
+      
+      if (sin_asignar) {
+        countFiltros.push('(asignado_a IS NULL OR asignado_a = "")');
+      }
+      
+      if (con_asignar) {
+        countFiltros.push('(asignado_a IS NOT NULL AND asignado_a != "")');
+      }
+      
+      if (countFiltros.length > 0) {
+        if (countConditions) {
+          countConditions += ' AND ' + countFiltros.join(' AND ');
+        } else {
+          countConditions = ' WHERE ' + countFiltros.join(' AND ');
+        }
       }
 
       const countQuery = `SELECT COUNT(*) as total FROM it_tickets${countConditions}`;
@@ -420,13 +372,17 @@ export class ITTicketsService {
 
       connection.release();
 
-      return {
-        datos: tickets || [],
+      const response = {
+        datos: ticketsFormateados || [],
         total,
         pagina,
         porPagina,
         totalPaginas: Math.ceil(total / porPagina)
       };
+      
+      console.log('🔍 Final response:', response);
+      
+      return response;
       
     } catch (error) {
       console.error('❌ Error in findAll:', error);
@@ -434,143 +390,34 @@ export class ITTicketsService {
     }
   }
 
-  async findAllForDashboard(paginationDto: PaginationDto, busqueda?: string, user?: any) {
-    const { pagina, porPagina } = paginationDto;
-    const skip = (pagina - 1) * porPagina;
-
-    let whereCondition: any = {};
-    
-    // Add search conditions
-    if (busqueda) {
-      whereCondition = [
-        { titulo: Like(`%${busqueda}%`) },
-        { descripcion: Like(`%${busqueda}%`) },
-        { solicitante: Like(`%${busqueda}%`) }
-      ];
-    }
-
-    // For dashboard, admin sees ALL tickets without role filtering
-    const [tickets, total] = await this.itTicketRepository.findAndCount({
-      where: whereCondition,
-      skip,
-      take: porPagina,
-      order: { fecha_creacion: 'DESC' }
-    });
-
-    return {
-      datos: tickets,
-      total,
-      pagina,
-      porPagina,
-      totalPaginas: Math.ceil(total / porPagina)
-    };
-  }
-
   async findOne(id: number): Promise<ITTicket> {
-    return await this.itTicketRepository.findOne({ where: { id } });
-  }
-
-  async update(id: number, updateITTicketDto: UpdateITTicketDto): Promise<ITTicket> {
-    await this.itTicketRepository.update(id, updateITTicketDto);
-    return await this.findOne(id);
-  }
-
-  async remove(id: number): Promise<void> {
-    await this.itTicketRepository.delete(id);
-  }
-
-  async obtenerEstadisticas(params?: { asignado_a?: string }, user?: any): Promise<any> {
-    // Filtrar tickets según parámetros y rol del usuario
-    let whereCondition: any = {};
-    if (params?.asignado_a && !this.isITUser(user)) {
-      whereCondition.asignado_a = params.asignado_a;
+    const connection = await pool.getConnection();
+    const [tickets] = await connection.query<any[]>(
+      'SELECT id, titulo, descripcion, estado, prioridad, categoria, solicitante, asignado_a, fecha_creacion, fecha_actualizacion, fecha_resolucion, creado_por, actualizado_por FROM it_tickets WHERE id = ?',
+      [id]
+    );
+    connection.release();
+    
+    if (!tickets || !Array.isArray(tickets) || tickets.length === 0) {
+      return null;
     }
-    // Si es IT o admin, no filtrar por asignado_a (mostrar todas las estadísticas)
     
-    const tickets = await this.itTicketRepository.find({ where: whereCondition });
-    
-    const abiertos = tickets.filter(t => t.estado === 'abierto').length;
-    const enProgreso = tickets.filter(t => t.estado === 'en_progreso').length;
-    const resueltos = tickets.filter(t => t.estado === 'resuelto').length;
-    const cerrados = tickets.filter(t => t.estado === 'cerrado').length;
-    const criticos = tickets.filter(t => t.prioridad === 'critica').length;
-    
-    const hoy = new Date();
-    const resueltosHoy = tickets.filter(t => 
-      t.estado === 'resuelto' && 
-      t.fecha_actualizacion && 
-      new Date(t.fecha_actualizacion).toDateString() === hoy.toDateString()
-    ).length;
-    
-    const ticketsAsignados = tickets.filter(t => t.asignado_a).length;
-    
-    const porCategoria = {
-      soporte_tecnico: tickets.filter(t => t.categoria === 'soporte_tecnico').length,
-      hardware: tickets.filter(t => t.categoria === 'hardware').length,
-      software: tickets.filter(t => t.categoria === 'software').length,
-      red: tickets.filter(t => t.categoria === 'red').length,
-      acceso: tickets.filter(t => t.categoria === 'acceso').length,
-      sap: tickets.filter(t => t.categoria === 'sap').length,
-      sitelink: tickets.filter(t => t.categoria === 'sitelink').length,
-    };
-    
-    const porPrioridad = {
-      critica: tickets.filter(t => t.prioridad === 'critica').length,
-      alta: tickets.filter(t => t.prioridad === 'alta').length,
-      media: tickets.filter(t => t.prioridad === 'media').length,
-      baja: tickets.filter(t => t.prioridad === 'baja').length,
-    };
-
+    const ticket = tickets[0];
     return {
-      abiertos,
-      enProgreso,
-      resueltos,
-      cerrados,
-      criticos,
-      resueltosHoy,
-      ticketsAsignados,
-      porCategoria,
-      porPrioridad,
-    };
-  }
-
-  async asignarTicket(id: number, asignado_a: string, user?: any): Promise<ITTicket> {
-    const usuarioId = await this.resolveUsuarioId(user);
-    const ticket = await this.findOne(id);
-    const asignadoAnterior = ticket?.asignado_a || '';
-    const asignadoNuevo = asignado_a || '';
-
-    const updateData: any = { asignado_a: asignadoNuevo };
-    if (usuarioId) {
-      updateData.actualizado_por = usuarioId;
-    }
-
-    if (asignadoAnterior !== asignadoNuevo && usuarioId) {
-      await this.guardarHistorial(
-        id,
-        ticket?.estado,
-        ticket?.estado,
-        usuarioId,
-        `Asignación cambiada de "${asignadoAnterior || 'sin asignar'}" a "${asignadoNuevo || 'sin asignar'}"`,
-      );
-    }
-
-    await this.itTicketRepository.update(id, updateData);
-    const ticketActualizado = await this.findOne(id);
-
-    // Notificar asignación: técnico (tiene ticket nuevo) + solicitante (está siendo atendido)
-    if (asignadoAnterior !== asignadoNuevo && asignadoNuevo) {
-      const destinatarios = [asignadoNuevo, ticket?.solicitante].filter(Boolean);
-      this.emailService.enviarTicketAsignadoIT({
-        ticketId: id,
-        titulo: ticket?.titulo || '',
-        solicitante: ticket?.solicitante || '',
-        tecnicoEmail: asignadoNuevo,
-        destinatarios,
-      }).catch(() => {});
-    }
-
-    return ticketActualizado;
+      id: ticket.id,
+      titulo: ticket.titulo,
+      descripcion: ticket.descripcion,
+      estado: ticket.estado,
+      prioridad: ticket.prioridad,
+      categoria: ticket.categoria,
+      solicitante: ticket.solicitante,
+      asignado_a: ticket.asignado_a,
+      fecha_creacion: ticket.fecha_creacion,
+      fecha_actualizacion: ticket.fecha_actualizacion,
+      fecha_resolucion: ticket.fecha_resolucion,
+      creado_por: ticket.creado_por,
+      actualizado_por: ticket.actualizado_por
+    } as ITTicket;
   }
 
   async cambiarEstado(id: number, estado: 'abierto' | 'en_progreso' | 'resuelto' | 'cerrado', user?: any): Promise<ITTicket> {
@@ -595,201 +442,493 @@ export class ITTicketsService {
       console.log('❌ usuarioId no encontrado');
     }
     
-    // Si el estado cambió, guardar en historial
-    if (estadoAnterior !== estado && usuarioId) {
-      await this.guardarHistorial(
-        id,
-        estadoAnterior,
-        estado,
-        usuarioId,
-        `Cambio de estado de "${estadoAnterior}" a "${estado}"`
-      );
-    }
-    
     await this.itTicketRepository.update(id, updateData);
     const ticketActualizado = await this.findOne(id);
-
-    // Notificar cambio de estado: solicitante + técnico asignado (si existe)
-    if (estadoAnterior !== estado) {
-      const destinatarios = [ticket?.solicitante, ticket?.asignado_a].filter(Boolean);
-      this.emailService.enviarCambioEstadoTicketIT({
-        ticketId: id,
-        titulo: ticket?.titulo || '',
-        estadoAnterior,
-        estadoNuevo: estado,
-        destinatarios,
-      }).catch(() => {});
-    }
 
     return ticketActualizado;
   }
 
-  async agregarComentario(id: number, comentario: string, user?: any): Promise<ITTicketComentario> {
+  private async resolveUsuarioId(user?: any): Promise<number | null> {
+    if (!user) return null;
+
+    const directId = user?.id ?? user?.userId ?? user?.sub;
+    if (directId && typeof directId === 'number') {
+      return directId;
+    }
+
+    // Buscar en la base de datos por email
+    const userEmail = (user?.email || '').trim();
+    if (!userEmail) return null;
+
     try {
-      const usuarioId = await this.resolveUsuarioId(user);
-      if (!usuarioId) {
-        console.error('No se pudo resolver usuarioId para comentario:', {
-          ticketId: id,
-          userKeys: user ? Object.keys(user) : null,
-          email: user?.email,
-          id: user?.id,
-          sub: user?.sub,
-          userId: user?.userId,
-        });
-        throw new Error('Usuario inválido para comentario');
-      }
-
-      const nuevoComentario = this.comentarioRepository.create({
-        ticket_id: id,
-        comentario,
-        usuario_id: usuarioId,
-      });
-
-      const savedComentario = await this.comentarioRepository.save(nuevoComentario);
-
-      // Notificar al OTRO lado: si el solicitante comentó → avisar al técnico/Admin IT
-      // Si el técnico/admin comentó → avisar al solicitante
-      this.findOne(id).then(async (ticket) => {
-        if (!ticket) return;
-        const autorEmail = (user?.email || '').toLowerCase().trim();
-        const esSolicitante = autorEmail === (ticket.solicitante || '').toLowerCase();
-        let destinatario: string | null = null;
-        if (esSolicitante) {
-          destinatario = ticket.asignado_a || await this.getAdminITEmail();
-        } else {
-          destinatario = ticket.solicitante || null;
-        }
-        if (destinatario && destinatario.toLowerCase() !== autorEmail) {
-          this.emailService.enviarComentarioTicketIT({
-            ticketId: id,
-            titulo: ticket.titulo,
-            comentario,
-            autorEmail: user?.email || '',
-            destinatario,
-          }).catch(() => {});
-        }
-      }).catch(() => {});
-
-      return savedComentario;
+      const [rows] = await pool.query<any[]>(
+        'SELECT id FROM usuarios WHERE email = ? LIMIT 1',
+        [userEmail]
+      );
+      return rows?.[0]?.id || null;
     } catch (error) {
-      console.error('Error al agregar comentario:', error);
-      throw new Error('No se pudo agregar el comentario');
+      console.error('Error al resolver usuarioId:', error);
+      return null;
     }
   }
 
-  async obtenerNotificacionesComentarios(since: string | undefined, user?: any): Promise<any[]> {
+  private async getRolFromDB(userId: number): Promise<any> {
+    try {
+      const [rows] = await pool.query<any[]>(
+        'SELECT r.* FROM usuarios u JOIN roles r ON r.id = u.rol_id WHERE u.id = ?',
+        [userId]
+      );
+      return rows?.[0] || null;
+    } catch (error) {
+      console.error('Error al obtener rol desde BD:', error);
+      return null;
+    }
+  }
+
+  async obtenerHistorial(id: number): Promise<any[]> {
+    try {
+      const connection = await pool.getConnection();
+      const [historial] = await connection.query<any[]>(
+        `SELECT h.*, u.nombre as nombre_usuario 
+         FROM it_ticket_historial h 
+         LEFT JOIN usuarios u ON u.id = h.usuario_id 
+         WHERE h.ticket_id = ? 
+         ORDER BY h.fecha_cambio DESC`,
+        [id]
+      );
+      connection.release();
+      
+      return historial || [];
+    } catch (error) {
+      console.error('Error al obtener historial:', error);
+      return [];
+    }
+  }
+
+  async obtenerEstadisticasPorTecnico(user: any): Promise<any> {
     try {
       const userEmail = (user?.email || '').toLowerCase().trim();
-      if (!userEmail) return [];
+      if (!userEmail) {
+        return {
+          abiertos: 0,
+          enProgreso: 0,
+          resueltos: 0,
+          cerrados: 0,
+          criticos: 0,
+          resueltosHoy: 0,
+          ticketsAsignados: 0,
+          totalTickets: 0,
+          porCategoria: {
+            soporte_tecnico: 0,
+            hardware: 0,
+            software: 0,
+            red: 0,
+            acceso: 0,
+            sap: 0,
+            sitelink: 0,
+          },
+          porPrioridad: {
+            critica: 0,
+            alta: 0,
+            media: 0,
+            baja: 0,
+          },
+        };
+      }
 
+      // Usar la vista v_it_tickets_por_usuario para obtener datos por técnico
+      const [rows] = await pool.query<any[]>(
+        `SELECT 
+          COUNT(CASE WHEN estado = 'abierto' THEN 1 END) as abiertos,
+          COUNT(CASE WHEN estado = 'en_progreso' THEN 1 END) as enProgreso,
+          COUNT(CASE WHEN estado = 'resuelto' THEN 1 END) as resueltos,
+          COUNT(CASE WHEN estado = 'cerrado' THEN 1 END) as cerrados,
+          COUNT(CASE WHEN prioridad = 'critica' THEN 1 END) as criticos,
+          COUNT(CASE WHEN DATE(fecha_actualizacion) = CURDATE() AND estado IN ('resuelto', 'cerrado') THEN 1 END) as resueltosHoy,
+          COUNT(CASE WHEN asignado_a IS NOT NULL AND asignado_a != '' THEN 1 END) as ticketsAsignados,
+          COUNT(*) as totalTickets
+        FROM v_it_tickets_por_usuario
+        WHERE tecnico_email = ?`,
+        [userEmail]
+      );
+      const statsData = rows[0];
+
+      // Estadísticas por categoría
+      const [categoriasRows] = await pool.query<any[]>(
+        `SELECT categoria, COUNT(*) as value
+        FROM v_it_tickets_por_usuario
+        WHERE tecnico_email = ? AND categoria IS NOT NULL AND categoria != ''
+        GROUP BY categoria
+        ORDER BY value DESC`,
+        [userEmail]
+      );
+
+      // Estadísticas por prioridad
+      const [prioridadesRows] = await pool.query<any[]>(
+        `SELECT prioridad, COUNT(*) as value
+        FROM v_it_tickets_por_usuario
+        WHERE tecnico_email = ? AND prioridad IS NOT NULL AND prioridad != ''
+        GROUP BY prioridad
+        ORDER BY 
+          CASE prioridad
+            WHEN 'critica' THEN 1
+            WHEN 'alta' THEN 2
+            WHEN 'media' THEN 3
+            WHEN 'baja' THEN 4
+          END`,
+        [userEmail]
+      );
+
+      const porCategoria = {
+        soporte_tecnico: categoriasRows.find((c: any) => c.categoria === 'soporte_tecnico')?.value || 0,
+        planta_telefonica: categoriasRows.find((c: any) => c.categoria === 'planta_telefonica')?.value || 0,
+        office_correo: categoriasRows.find((c: any) => c.categoria === 'office_correo')?.value || 0,
+        bitrix: categoriasRows.find((c: any) => c.categoria === 'bitrix')?.value || 0,
+        callguru: categoriasRows.find((c: any) => c.categoria === 'callguru')?.value || 0,
+        sap: categoriasRows.find((c: any) => c.categoria === 'sap')?.value || 0,
+        sitelink: categoriasRows.find((c: any) => c.categoria === 'sitelink')?.value || 0,
+        red_internet: categoriasRows.find((c: any) => c.categoria === 'red_internet')?.value || 0,
+        acceso_credenciales: categoriasRows.find((c: any) => c.categoria === 'acceso_credenciales')?.value || 0,
+        otro: categoriasRows.find((c: any) => c.categoria === 'otro')?.value || 0,
+      };
+
+      const porPrioridad = {
+        critica: prioridadesRows.find((p: any) => p.prioridad === 'critica')?.value || 0,
+        alta: prioridadesRows.find((p: any) => p.prioridad === 'alta')?.value || 0,
+        media: prioridadesRows.find((p: any) => p.prioridad === 'media')?.value || 0,
+        baja: prioridadesRows.find((p: any) => p.prioridad === 'baja')?.value || 0,
+      };
+
+      return {
+        abiertos: statsData.abiertos || 0,
+        enProgreso: statsData.enProgreso || 0,
+        resueltos: statsData.resueltos || 0,
+        cerrados: statsData.cerrados || 0,
+        criticos: statsData.criticos || 0,
+        resueltosHoy: statsData.resueltosHoy || 0,
+        ticketsAsignados: statsData.ticketsAsignados || 0,
+        totalTickets: statsData.totalTickets || 0,
+        porCategoria,
+        porPrioridad,
+      };
+    } catch (error) {
+      console.error('Error al obtener estadísticas por técnico:', error);
+      return {
+        abiertos: 0,
+        enProgreso: 0,
+        resueltos: 0,
+        cerrados: 0,
+        criticos: 0,
+        resueltosHoy: 0,
+        ticketsAsignados: 0,
+        totalTickets: 0,
+        porCategoria: {
+          soporte_tecnico: 0,
+          hardware: 0,
+          software: 0,
+          red: 0,
+          acceso: 0,
+          sap: 0,
+          sitelink: 0,
+        },
+        porPrioridad: {
+          critica: 0,
+          alta: 0,
+          media: 0,
+          baja: 0,
+        },
+      };
+    }
+  }
+
+  async obtenerConteoHistorial(ids?: string, user?: any): Promise<any> {
+    try {
+      if (!ids) return {};
+      
+      const idsArray = ids.split(',').map(id => id.trim()).filter(id => id);
+      if (idsArray.length === 0) return {};
+
+      const placeholders = idsArray.map(() => '?').join(',');
+      const params: any[] = [...idsArray];
+      
+      let sql = `
+        SELECT h.ticket_id AS ticketId, COUNT(*) as conteo 
+        FROM it_ticket_historial h
+        INNER JOIN it_tickets t ON t.id = h.ticket_id
+        WHERE h.ticket_id IN (${placeholders})
+      `;
+      
+      // Verificar si el usuario tiene permiso para ver historial
       const isAdmin = user?.permisos?.todo === true || user?.rol?.permisos?.todo === true;
       const isIT = user?.rol?.permisos?.rutas?.includes('it_soluciones') || false;
-
-      let sinceDate = since ? new Date(since) : null;
-      if (!sinceDate || Number.isNaN(sinceDate.getTime())) {
-        // fallback: últimos 30 minutos
-        sinceDate = new Date(Date.now() - 30 * 60 * 1000);
-      }
-
-      // Admin e IT ven comentarios recientes de todos los tickets
-      // Otros usuarios solo ven tickets donde son solicitante o asignado
-      const baseQuery = `
-        SELECT
-          c.ticket_id AS ticketId,
-          c.id AS comentarioId,
-          c.comentario AS comentario,
-          u.email AS authorEmail,
-          c.fecha_creacion AS createdAt
-        FROM it_ticket_comentarios c
-        INNER JOIN it_tickets t ON t.id = c.ticket_id
-        LEFT JOIN usuarios u ON u.id = c.usuario_id
-        WHERE c.fecha_creacion > ?
-      `;
-
-      const params: any[] = [sinceDate];
-
-      let querySql = baseQuery;
+      
       if (!isAdmin && !isIT) {
-        querySql += ` AND (LOWER(t.solicitante) = ? OR LOWER(t.asignado_a) = ?) `;
-        params.push(userEmail, userEmail);
+        sql += ` AND (LOWER(t.solicitante) = ? OR LOWER(t.asignado_a) = ?) `;
+        params.push(user?.email, user?.email);
       }
 
-      querySql += ` ORDER BY c.fecha_creacion DESC LIMIT 50 `;
+      sql += ` GROUP BY h.ticket_id `;
+      
+      const connection = await pool.getConnection();
+      const [results] = await connection.query(sql, params) as [any[], any];
+      connection.release();
+      
+      const result: any = {};
+      (results as any[]).forEach((row: any) => {
+        result[String(row.ticketId)] = row.conteo;
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('Error al obtener conteo de historial:', error);
+      return {};
+    }
+  }
 
-      const [rows] = await pool.query<any[]>(querySql, params);
-      return (rows || []).map(r => ({
-        ticketId: Number(r.ticketId),
-        comentarioId: Number(r.comentarioId),
-        comentario: r.comentario,
-        authorEmail: r.authorEmail,
-        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : new Date().toISOString(),
-      }));
+  async create(createITTicketDto: CreateITTicketDto, user?: any): Promise<any> {
+    try {
+      const usuarioId = await this.resolveUsuarioId(user);
+      
+      // Agregar creado_por si tenemos el usuario
+      if (usuarioId) {
+        (createITTicketDto as any).creado_por = usuarioId;
+      }
+
+      const connection = await pool.getConnection();
+      const [result] = await connection.query(
+        'INSERT INTO it_tickets (titulo, descripcion, estado, prioridad, categoria, solicitante, asignado_a, fecha_creacion, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?)',
+        [
+          createITTicketDto.titulo,
+          createITTicketDto.descripcion,
+          createITTicketDto.estado || 'abierto',
+          createITTicketDto.prioridad,
+          createITTicketDto.categoria,
+          createITTicketDto.solicitante,
+          createITTicketDto.asignado_a,
+          usuarioId
+        ]
+      );
+      connection.release();
+
+      const ticketId = (result as any).insertId;
+      
+      // Registrar en historial
+      await this.guardarHistorial(ticketId, null, createITTicketDto.estado || 'abierto', usuarioId, 'Ticket creado');
+
+      return { id: ticketId, ...createITTicketDto };
+    } catch (error) {
+      console.error('Error al crear ticket:', error);
+      throw error;
+    }
+  }
+
+  async findAllForDashboard(paginationDto: any, busqueda?: string, user?: any): Promise<any> {
+    try {
+      const { pagina, porPagina } = paginationDto;
+      const skip = (pagina - 1) * porPagina;
+
+      const connection = await pool.getConnection();
+      const [tickets] = await connection.query(
+        `SELECT id, titulo, descripcion, estado, prioridad, categoria, solicitante, asignado_a, fecha_creacion, fecha_actualizacion, fecha_resolucion, creado_por, actualizado_por
+         FROM it_tickets
+         WHERE titulo LIKE ? OR descripcion LIKE ? OR solicitante LIKE ?
+         ORDER BY fecha_creacion DESC
+         LIMIT ? OFFSET ?`,
+        [`%${busqueda || ''}%`, `%${busqueda || ''}%`, `%${busqueda || ''}%`, porPagina, skip]
+      ) as [any[], any];
+      
+      const [countResult] = await connection.query(
+        `SELECT COUNT(*) as total FROM it_tickets WHERE titulo LIKE ? OR descripcion LIKE ? OR solicitante LIKE ?`,
+        [`%${busqueda || ''}%`, `%${busqueda || ''}%`, `%${busqueda || ''}%`]
+      ) as [any[], any];
+      
+      connection.release();
+
+      const total = countResult[0]?.total || 0;
+
+      return {
+        datos: tickets,
+        total,
+        pagina,
+        porPagina,
+        totalPaginas: Math.ceil(total / porPagina)
+      };
+    } catch (error) {
+      console.error('Error en findAllForDashboard:', error);
+      throw error;
+    }
+  }
+
+  async obtenerNotificacionesComentarios(since?: string, user?: any): Promise<any[]> {
+    try {
+      const connection = await pool.getConnection();
+      const [comentarios] = await connection.query(
+        `SELECT c.*, u.nombre as nombre_usuario, t.solicitante, t.asignado_a
+         FROM it_ticket_comentarios c
+         JOIN usuarios u ON u.id = c.usuario_id
+         JOIN it_tickets t ON t.id = c.ticket_id
+         WHERE c.fecha_creacion >= ?
+         ORDER BY c.fecha_creacion DESC`,
+        [since || new Date(Date.now() - 24 * 60 * 60 * 1000)] // Últimas 24 horas por defecto
+      ) as [any[], any];
+      connection.release();
+      
+      return comentarios || [];
     } catch (error) {
       console.error('Error al obtener notificaciones de comentarios:', error);
       return [];
     }
   }
 
-  async obtenerComentarios(id: number): Promise<ITTicketComentario[]> {
+  async update(id: number, updateITTicketDto: UpdateITTicketDto): Promise<any> {
     try {
-      return await this.comentarioRepository.find({
-        where: { ticket_id: id },
-        relations: ['usuario'],
-        order: { fecha_creacion: 'ASC' },
-      });
+      const connection = await pool.getConnection();
+      await connection.query(
+        'UPDATE it_tickets SET titulo = ?, descripcion = ?, estado = ?, prioridad = ?, categoria = ?, solicitante = ?, asignado_a = ?, fecha_actualizacion = NOW() WHERE id = ?',
+        [
+          updateITTicketDto.titulo,
+          updateITTicketDto.descripcion,
+          updateITTicketDto.estado,
+          updateITTicketDto.prioridad,
+          updateITTicketDto.categoria,
+          updateITTicketDto.solicitante,
+          updateITTicketDto.asignado_a,
+          id
+        ]
+      );
+      connection.release();
+      
+      return await this.findOne(id);
     } catch (error) {
-      console.error('Error al obtener comentarios:', error);
-      return [];
+      console.error('Error al actualizar ticket:', error);
+      throw error;
     }
   }
 
-  async obtenerComentariosConPermiso(id: number, userEmail: string, user?: any): Promise<ITTicketComentario[]> {
+  async remove(id: number): Promise<void> {
     try {
-      // Primero obtener el ticket para verificar permisos
+      const connection = await pool.getConnection();
+      await connection.query('DELETE FROM it_tickets WHERE id = ?', [id]);
+      connection.release();
+    } catch (error) {
+      console.error('Error al eliminar ticket:', error);
+      throw error;
+    }
+  }
+
+  async asignarTicket(id: number, asignado_a: string, user?: any): Promise<any> {
+    try {
+      const usuarioId = await this.resolveUsuarioId(user);
       const ticket = await this.findOne(id);
+      const asignadoAnterior = ticket?.asignado_a || '';
+      
+      const connection = await pool.getConnection();
+      await connection.query(
+        'UPDATE it_tickets SET asignado_a = ?, actualizado_por = ?, fecha_actualizacion = NOW() WHERE id = ?',
+        [asignado_a, usuarioId, id]
+      );
+      connection.release();
+
+      if (asignadoAnterior !== asignado_a && usuarioId) {
+        await this.guardarHistorial(
+          id,
+          ticket?.estado,
+          ticket?.estado,
+          usuarioId,
+          `Asignación cambiada de "${asignadoAnterior || 'sin asignar'}" a "${asignado_a || 'sin asignar'}"`,
+        );
+      }
+
+      return await this.findOne(id);
+    } catch (error) {
+      console.error('Error al asignar ticket:', error);
+      throw error;
+    }
+  }
+
+  async agregarComentario(id: number, comentario: string, user?: any): Promise<any> {
+    try {
+      const usuarioId = await this.resolveUsuarioId(user);
+      if (!usuarioId) {
+        throw new Error('Usuario inválido para comentario');
+      }
+
+      const connection = await pool.getConnection();
+      const [result] = await connection.query(
+        'INSERT INTO it_ticket_comentarios (ticket_id, comentario, usuario_id, fecha_creacion) VALUES (?, ?, ?, NOW())',
+        [id, comentario, usuarioId]
+      );
+      connection.release();
+
+      const comentarioId = (result as any).insertId;
+      
+      return { id: comentarioId, ticket_id: id, comentario, usuario_id: usuarioId };
+    } catch (error) {
+      console.error('Error al agregar comentario:', error);
+      throw error;
+    }
+  }
+
+  async obtenerConteoComentarios(ids?: string, user?: any): Promise<any> {
+    try {
+      if (!ids) return {};
+      
+      const idsArray = ids.split(',').map(id => id.trim()).filter(id => id);
+      if (idsArray.length === 0) return {};
+
+      const placeholders = idsArray.map(() => '?').join(',');
+      const params: any[] = [...idsArray];
+      
+      let sql = `
+        SELECT c.ticket_id AS ticketId, COUNT(*) as conteo 
+        FROM it_ticket_comentarios c
+        INNER JOIN it_tickets t ON t.id = c.ticket_id
+        WHERE c.ticket_id IN (${placeholders})
+      `;
       
       // Verificar si el usuario tiene permiso para ver comentarios
       const isAdmin = user?.permisos?.todo === true || user?.rol?.permisos?.todo === true;
       const isIT = user?.rol?.permisos?.rutas?.includes('it_soluciones') || false;
-      const isSolicitante = ticket.solicitante === userEmail;
-      const isAsignado = ticket.asignado_a === userEmail;
       
-      // Solo permitir ver comentarios si es admin, IT, solicitante o asignado
-      if (!isAdmin && !isIT && !isSolicitante && !isAsignado) {
-        console.log('🔒 Usuario no autorizado para ver comentarios del ticket:', {
-          userEmail,
-          solicitante: ticket.solicitante,
-          asignado_a: ticket.asignado_a,
-          isAdmin,
-          isIT,
-          isSolicitante,
-          isAsignado
-        });
-        return [];
+      if (!isAdmin && !isIT) {
+        sql += ` AND (LOWER(t.solicitante) = ? OR LOWER(t.asignado_a) = ?) `;
+        params.push(user?.email, user?.email);
       }
+
+      sql += ` GROUP BY c.ticket_id `;
       
-      console.log('✅ Usuario autorizado para ver comentarios:', userEmail);
+      const connection = await pool.getConnection();
+      const [results] = await connection.query(sql, params) as [any[], any];
+      connection.release();
       
-      return await this.comentarioRepository.find({
-        where: { ticket_id: id },
-        relations: ['usuario'],
-        order: { fecha_creacion: 'ASC' },
+      const result: any = {};
+      (results as any[]).forEach((row: any) => {
+        result[String(row.ticketId)] = row.conteo;
       });
+      
+      return result;
     } catch (error) {
-      console.error('Error al obtener comentarios con permiso:', error);
-      return [];
+      console.error('Error al obtener conteo de comentarios:', error);
+      return {};
     }
   }
 
-  async obtenerHistorial(id: number): Promise<ITTicketHistorial[]> {
+  async obtenerComentariosConPermiso(id: number, userEmail: string, user?: any): Promise<any[]> {
     try {
-      return await this.historialRepository.find({
-        where: { ticket_id: id },
-        relations: ['usuario'],
-        order: { fecha_cambio: 'DESC' },
-      });
+      const connection = await pool.getConnection();
+      const [comentarios] = await connection.query(
+        `SELECT c.*, u.nombre as nombre_usuario, u.email as usuario_email
+         FROM it_ticket_comentarios c
+         JOIN usuarios u ON u.id = c.usuario_id
+         WHERE c.ticket_id = ?
+         ORDER BY c.fecha_creacion ASC`,
+        [id]
+      ) as [any[], any];
+      connection.release();
+      
+      return comentarios || [];
     } catch (error) {
-      console.error('Error al obtener historial:', error);
+      console.error('Error al obtener comentarios con permiso:', error);
       return [];
     }
   }
@@ -802,15 +941,12 @@ export class ITTicketsService {
     comentario?: string
   ): Promise<void> {
     try {
-      const historial = this.historialRepository.create({
-        ticket_id: ticketId,
-        estado_anterior: estadoAnterior,
-        estado_nuevo: estadoNuevo,
-        usuario_id: usuarioId,
-        comentario,
-      });
-      
-      await this.historialRepository.save(historial);
+      const connection = await pool.getConnection();
+      await connection.query(
+        'INSERT INTO it_ticket_historial (ticket_id, estado_anterior, estado_nuevo, usuario_id, comentario, fecha_cambio) VALUES (?, ?, ?, ?, ?, NOW())',
+        [ticketId, estadoAnterior, estadoNuevo, usuarioId, comentario]
+      );
+      connection.release();
     } catch (error) {
       console.error('Error al guardar historial:', error);
     }
