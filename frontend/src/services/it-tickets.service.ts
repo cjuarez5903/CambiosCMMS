@@ -1,7 +1,7 @@
 import api from './api';
 
 // URL base de la API - ajustar según configuración del backend
-const API_URL = process.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export interface ITTicket {
   id?: number;
@@ -9,7 +9,7 @@ export interface ITTicket {
   descripcion: string;
   estado: 'abierto' | 'en_progreso' | 'resuelto' | 'cerrado';
   prioridad: 'baja' | 'media' | 'alta' | 'critica';
-  categoria: 'soporte_tecnico' | 'hardware' | 'software' | 'red' | 'acceso' | 'sap' | 'sitelink';
+  categoria: 'soporte_tecnico' | 'planta_telefonica' | 'office_correo' | 'bitrix' | 'callguru' | 'sap' | 'sitelink' | 'red_internet' | 'acceso_credenciales' | 'otro' | string;
   solicitante: string;
   asignado_a?: string;
   fecha_creacion?: string;
@@ -21,7 +21,7 @@ export interface CrearTicketRequest {
   titulo: string;
   descripcion: string;
   prioridad: 'baja' | 'media' | 'alta' | 'critica';
-  categoria: 'soporte_tecnico' | 'hardware' | 'software' | 'red' | 'acceso' | 'sap' | 'sitelink';
+  categoria: 'soporte_tecnico' | 'planta_telefonica' | 'office_correo' | 'bitrix' | 'callguru' | 'sap' | 'sitelink' | 'red_internet' | 'acceso_credenciales' | 'otro' | string;
   solicitante: string;
   asignado_a?: string;
 }
@@ -52,11 +52,16 @@ export interface EstadisticasTicketsResponse {
   resueltosHoy: number;
   ticketsAsignados: number;
   porCategoria: {
-    hardware: number;
-    software: number;
-    red: number;
-    acceso: number;
     soporte_tecnico: number;
+    planta_telefonica: number;
+    office_correo: number;
+    bitrix: number;
+    callguru: number;
+    sap: number;
+    sitelink: number;
+    red_internet: number;
+    acceso_credenciales: number;
+    otro: number;
   };
   porPrioridad: {
     critica: number;
@@ -239,6 +244,16 @@ class ITTicketsService {
       return response.data;
     } catch (error) {
       console.error('Error al obtener notificaciones de comentarios IT:', error);
+      throw error;
+    }
+  }
+
+  async obtenerEstadisticasPorTecnico(): Promise<any> {
+    try {
+      const response = await api.get(`${this.baseUrl}/estadisticas-por-tecnico`);
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener estadísticas por técnico:', error);
       throw error;
     }
   }
