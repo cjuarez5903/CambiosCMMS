@@ -17,7 +17,21 @@ import { CompletarOrdenDto } from './dto/completar-orden.dto';
 import { CapexService } from '../capex/capex.service';
 import { EmailService } from '../email/email.service';
 import { ConfigService } from '@nestjs/config';
-import { pool } from '../it-tickets/it-tickets.service';
+import * as mysql from 'mysql2/promise';
+import { config } from 'dotenv';
+
+config();
+
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT) || 3306,
+  user: process.env.DB_USERNAME,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_DATABASE,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
 
 @Injectable()
 export class OrdenesTrabajoService {
