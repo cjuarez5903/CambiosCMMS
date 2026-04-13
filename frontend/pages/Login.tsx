@@ -39,7 +39,14 @@ const Login: React.FC = () => {
         ? rutasDisponibles[rutasPermitidas[0]] || '/'
         : '/';
 
-      navigate(primeraRutaPermitida);
+      // Si venía de un deep link (email), redirigir ahí
+      const redirectPendiente = sessionStorage.getItem('redirectAfterLogin');
+      if (redirectPendiente) {
+        sessionStorage.removeItem('redirectAfterLogin');
+        navigate(redirectPendiente);
+      } else {
+        navigate(primeraRutaPermitida);
+      }
     } catch (err: any) {
       console.error('Error de login:', err);
       const mensajeError = err.response?.data?.mensaje || 'Error al iniciar sesión. Verifica tus credenciales.';

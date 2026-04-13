@@ -69,19 +69,16 @@ const Dashboard: React.FC = () => {
         o.estado?.toLowerCase() === 'completada'
       ).length;
 
-      // Gasto total: solo asignadas y completadas (tienen monto confirmado)
-      const ordenesConGasto = ordenes.filter((o: any) => {
-        const estado = o.estado?.toLowerCase();
-        return estado === 'asignada' || estado === 'completada';
-      });
-      const gastoTotal = ordenesConGasto.reduce(
+      // Gasto total: SOLO completadas con costoReal confirmado (evita duplicar con costoEstimado de asignadas)
+      const ordenesCompletadas = ordenes.filter((o: any) => o.estado?.toLowerCase() === 'completada');
+      const gastoTotal = ordenesCompletadas.reduce(
         (sum: number, o: any) => sum + (Number(o.costoReal) || 0),
         0
       );
 
-      // Desglose de gasto por país
+      // Desglose de gasto por país (misma base: solo completadas con costoReal)
       const gastoPorPaisMap: Record<string, number> = {};
-      ordenesConGasto.forEach((o: any) => {
+      ordenesCompletadas.forEach((o: any) => {
         const pais = o.sucursal?.pais?.nombre;
         if (pais) {
           gastoPorPaisMap[pais] = (gastoPorPaisMap[pais] || 0) + (Number(o.costoReal) || 0);
@@ -251,7 +248,7 @@ const Dashboard: React.FC = () => {
             <h3 className="text-2xl font-bold text-gray-800">
               ${stats?.gastoTotal?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'} USD
             </h3>
-            <p className="text-xs text-gray-400 mt-1">Incluye órdenes asignadas y completadas</p>
+            <p className="text-xs text-gray-400 mt-1">Solo órdenes completadas con costo final confirmado</p>
           </div>
           <div className="p-3 rounded-lg bg-sky-50 text-mrb-lightblue">
             <DollarSign size={24} />
