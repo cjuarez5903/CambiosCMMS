@@ -78,15 +78,19 @@ export class ITTicketsService {
       
       console.log('🔍 Estadísticas generales:', estadisticas);
 
-      // Estadísticas por categoría - usando la vista
-      const categoriasQuery = `
-        SELECT categoria, SUM(cantidad) as value
-        FROM v_it_tickets_por_categoria_estado
-        WHERE categoria IS NOT NULL AND categoria != ''
-        ${asignadoFilter}
-        GROUP BY categoria
-        ORDER BY value DESC
-      `;
+      // Estadísticas por categoría - vista cuando no hay filtro, tabla directa cuando hay filtro
+      const categoriasQuery = usarFiltroAsignado
+        ? `SELECT categoria, COUNT(*) as value
+           FROM it_tickets
+           WHERE categoria IS NOT NULL AND categoria != ''
+           ${asignadoFilter}
+           GROUP BY categoria
+           ORDER BY value DESC`
+        : `SELECT categoria, SUM(cantidad) as value
+           FROM v_it_tickets_por_categoria_estado
+           WHERE categoria IS NOT NULL AND categoria != ''
+           GROUP BY categoria
+           ORDER BY value DESC`;
       console.log('🔍 Categorías Query:', categoriasQuery);
       console.log('🔍 Categorías Params:', asignadoParam ? [asignadoParam] : []);
       const [categoriasRows] = await pool.query(categoriasQuery, asignadoParam ? [asignadoParam] : []) as [any[], any];
