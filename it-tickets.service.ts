@@ -194,8 +194,8 @@ export class ITTicketsService {
       let whereClause = '';
       let params: any[] = [];
 
-      // Solo Administrador IT ve todos los tickets
-      const canVerTodos = rol?.nombre === 'Administrador IT';
+      // Administrador y Administrador IT ven todos los tickets
+      const canVerTodos = rol?.nombre === 'Administrador IT' || rol?.nombre === 'Administrador';
       const esTecnicoIT = rol?.nombre === 'Técnico IT';
       const esUsuarioIT = user?.rol?.permisos?.rutas?.includes('it_soluciones') || false;
 
