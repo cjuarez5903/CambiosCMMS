@@ -128,6 +128,11 @@ cp $CAMBIOS/usuarios.service.ts $BACKEND/src/modules/usuarios/
 cp $BACKEND/src/common/guards/roles.guard.ts $BACKEND/src/common/guards/roles.guard.ts.old 2>/dev/null; echo "      ✓ roles.guard.ts.old"
 cp $CAMBIOS/roles.guard.ts $BACKEND/src/common/guards/
 
+# jwt.strategy.ts
+mkdir -p $BACKEND/src/modules/auth/strategies
+cp $BACKEND/src/modules/auth/strategies/jwt.strategy.ts $BACKEND/src/modules/auth/strategies/jwt.strategy.ts.old 2>/dev/null; echo "      ✓ jwt.strategy.ts.old"
+cp $CAMBIOS/jwt.strategy.ts $BACKEND/src/modules/auth/strategies/
+
 # package.json
 cp $BACKEND/package.json $BACKEND/package.json.old 2>/dev/null; echo "      ✓ package.json.old"
 cp $CAMBIOS/package.json $BACKEND/
