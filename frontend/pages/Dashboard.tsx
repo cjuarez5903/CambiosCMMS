@@ -73,8 +73,11 @@ const Dashboard: React.FC = () => {
         return fecha.getMonth() === hoy.getMonth() && fecha.getFullYear() === hoy.getFullYear();
       }).length;
 
-      // Gasto total: excluye órdenes PENDIENTE (sin monto confirmado)
-      const ordenesConGasto = ordenes.filter((o: any) => o.estado?.toLowerCase() !== 'pendiente');
+      // Gasto total: solo asignadas y completadas (tienen monto confirmado)
+      const ordenesConGasto = ordenes.filter((o: any) => {
+        const estado = o.estado?.toLowerCase();
+        return estado === 'asignada' || estado === 'completada';
+      });
       const gastoTotal = ordenesConGasto.reduce(
         (sum: number, o: any) => sum + (Number(o.costoReal) || 0),
         0
@@ -252,7 +255,7 @@ const Dashboard: React.FC = () => {
             <h3 className="text-2xl font-bold text-gray-800">
               ${stats?.gastoTotal?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'} USD
             </h3>
-            <p className="text-xs text-gray-400 mt-1">Excluye órdenes pendientes sin monto confirmado</p>
+            <p className="text-xs text-gray-400 mt-1">Incluye órdenes asignadas y completadas</p>
           </div>
           <div className="p-3 rounded-lg bg-sky-50 text-mrb-lightblue">
             <DollarSign size={24} />
