@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Monitor, Plus, Search, Edit2, Trash2, Clock, CheckCircle, AlertCircle, X, Save, MessageSquare, UserPlus, RotateCcw, History } from 'lucide-react';
 import Swal from 'sweetalert2';
 import Pagination from '../src/components/Pagination';
@@ -31,7 +32,10 @@ interface ITTicketRow {
 
 const ITSoluciones: React.FC = () => {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const deepLinkProcessed = useRef(false);
   const [tickets, setTickets] = useState<ITTicketRow[]>([]);
+  const [detailModal, setDetailModal] = useState<{ isOpen: boolean; ticket: ITTicketRow | null }>({ isOpen: false, ticket: null });
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -105,6 +109,16 @@ const ITSoluciones: React.FC = () => {
     solicitante: user?.email || '',
     asignado_a: '',
   });
+
+  // Leer params URL al montar: ?estado=, ?prioridad=, ?tab=resueltos
+  useEffect(() => {
+    const estadoParam    = searchParams.get('estado');
+    const prioridadParam = searchParams.get('prioridad');
+    const tabParam       = searchParams.get('tab');
+    if (estadoParam)              setFiltroEstado(estadoParam);
+    if (prioridadParam)           setFiltroPrioridad(prioridadParam);
+    if (tabParam === 'resueltos') setMostrarResueltos(true);
+  }, []); // solo mount
 
   useEffect(() => {
     cargarTickets();
@@ -200,6 +214,19 @@ const ITSoluciones: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Deep link: ?openTicket=123 → auto-abrir modal de detalle
+  useEffect(() => {
+    if (loading) return;
+    if (deepLinkProcessed.current) return;
+    deepLinkProcessed.current = true;
+    const openTicketId = searchParams.get('openTicket');
+    if (!openTicketId) return;
+    const found = tickets.find(t => t.id === parseInt(openTicketId));
+    if (found) {
+      setDetailModal({ isOpen: true, ticket: found });
+    }
+  }, [loading, tickets]);
 
   const toast = (icon: 'success' | 'error' | 'warning' | 'info', title: string) =>
     Swal.fire({ toast: true, position: 'top-end', icon, title, showConfirmButton: false, timer: 2800, timerProgressBar: true });
@@ -679,6 +706,10 @@ const ITSoluciones: React.FC = () => {
                             <span className="text-xs font-medium">{showComments[ticket.id] ? comments.filter(c => c.ticket_id === ticket.id).length : (ticket.comentarios ?? 0)}</span>
                           </button>
                         )}
+                        <button onClick={() => setDetailModal({ isOpen: true, ticket })} title="Ver descripción"
+                          className="p-2 rounded-lg bg-sky-50 text-sky-600 hover:bg-sky-100 transition-colors">
+                          <AlertCircle size={15} />
+                        </button>
                         {canDeleteTickets && (
                           <button onClick={() => handleDelete(ticket.id)} title="Eliminar"
                             className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
@@ -1165,6 +1196,92 @@ const ITSoluciones: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal Descripción del Ticket */}
+      {detailModal.isOpen && detailModal.ticket && (() => {
+        const t = detailModal.ticket;
+        const estadoColor: Record<string, string> = {
+          abierto: 'bg-red-100 text-red-700 border border-red-200',
+          en_progreso: 'bg-yellow-100 text-yellow-700 border border-yellow-200',
+          resuelto: 'bg-green-100 text-green-700 border border-green-200',
+          cerrado: 'bg-gray-100 text-gray-600 border border-gray-200',
+        };
+        const prioridadColor: Record<string, string> = {
+          critica: 'bg-red-500 text-white',
+          alta: 'bg-orange-400 text-white',
+          media: 'bg-yellow-400 text-white',
+          baja: 'bg-green-400 text-white',
+        };
+        return (
+          <div className="fixed inset-0 z-50 overflow-y-auto" onClick={() => setDetailModal({ isOpen: false, ticket: null })}>
+            <div className="flex items-center justify-center min-h-screen px-4 py-8">
+              <div className="fixed inset-0 bg-gray-900 bg-opacity-60 transition-opacity" />
+              <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full z-10 overflow-hidden" onClick={e => e.stopPropagation()}>
+                {/* Header con gradiente */}
+                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-indigo-200 text-xs font-medium uppercase tracking-wide mb-1">Ticket IT #{t.id}</p>
+                      <h3 className="text-white font-bold text-lg leading-snug">{t.titulo}</h3>
+                    </div>
+                    <button onClick={() => setDetailModal({ isOpen: false, ticket: null })}
+                      className="text-indigo-200 hover:text-white transition-colors ml-4 mt-0.5 flex-shrink-0">
+                      <X size={20} />
+                    </button>
+                  </div>
+                  {/* Badges en el header */}
+                  <div className="flex gap-2 mt-3 flex-wrap">
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${estadoColor[t.estado] || 'bg-gray-100 text-gray-600'}`}>
+                      {t.estado?.replace('_', ' ')}
+                    </span>
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${prioridadColor[t.prioridad] || 'bg-gray-400 text-white'}`}>
+                      {t.prioridad}
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-white bg-opacity-20 text-white border border-white border-opacity-30">
+                      {t.categoria?.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Cuerpo */}
+                <div className="px-6 py-5 space-y-4">
+                  {/* Descripción */}
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Descripción</p>
+                    <p className="text-gray-700 text-sm bg-indigo-50 rounded-lg p-3 whitespace-pre-line leading-relaxed border border-indigo-100">
+                      {t.descripcion || 'Sin descripción'}
+                    </p>
+                  </div>
+
+                  {/* Info grid */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-400 font-medium mb-0.5">Solicitante</p>
+                      <p className="text-sm font-semibold text-gray-800 truncate">{t.solicitante}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-400 font-medium mb-0.5">Asignado a</p>
+                      <p className="text-sm font-semibold text-gray-800 truncate">{t.asignado_a || <span className="text-gray-400 font-normal">Sin asignar</span>}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3 col-span-2">
+                      <p className="text-xs text-gray-400 font-medium mb-0.5">Fecha de creación</p>
+                      <p className="text-sm font-semibold text-gray-800">{new Date(t.fecha_creacion).toLocaleDateString('es-MX', { dateStyle: 'long' })}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-6 pb-5">
+                  <button onClick={() => setDetailModal({ isOpen: false, ticket: null })}
+                    className="w-full py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors">
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

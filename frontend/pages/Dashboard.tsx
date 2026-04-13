@@ -65,13 +65,9 @@ const Dashboard: React.FC = () => {
       const asignadas  = ordenes.filter((o: any) => o.estado?.toLowerCase() === 'asignada').length;
       const urgentes   = ordenes.filter((o: any) => o.prioridad === 'urgente').length;
 
-      const completadasMes = ordenes.filter((o: any) => {
-        if (o.estado?.toLowerCase() !== 'completada') return false;
-        if (!o.fechaCompletado) return false;
-        const fecha = new Date(o.fechaCompletado);
-        const hoy = new Date();
-        return fecha.getMonth() === hoy.getMonth() && fecha.getFullYear() === hoy.getFullYear();
-      }).length;
+      const completadasMes = ordenes.filter((o: any) =>
+        o.estado?.toLowerCase() === 'completada'
+      ).length;
 
       // Gasto total: solo asignadas y completadas (tienen monto confirmado)
       const ordenesConGasto = ordenes.filter((o: any) => {
@@ -237,11 +233,11 @@ const Dashboard: React.FC = () => {
           onAction={() => navigate('/work-orders?prioridad=urgente')}
         />
         <StatCard
-          title="Completadas (Mes)"
+          title="Completadas"
           value={stats?.completadasMes?.toString() || '0'}
           icon={CheckCircle}
           color="teal"
-          trend="Este mes"
+          trend="Total completadas"
           actionLabel="Ver Completadas →"
           onAction={() => navigate('/work-orders?tab=completadas')}
         />
