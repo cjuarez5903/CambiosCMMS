@@ -250,7 +250,7 @@ const Dashboard: React.FC = () => {
           <div>
             <p className="text-sm font-medium text-gray-500 mb-1">Gasto Total Acumulado</p>
             <h3 className="text-2xl font-bold text-gray-800">
-              ${stats?.gastoTotal?.toFixed(2) || '0.00'} USD
+              ${stats?.gastoTotal?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'} USD
             </h3>
             <p className="text-xs text-gray-400 mt-1">Excluye órdenes pendientes sin monto confirmado</p>
           </div>
@@ -263,7 +263,7 @@ const Dashboard: React.FC = () => {
             {stats.gastoPorPaisArray.map((p: any) => (
               <div key={p.nombre} className="flex justify-between text-sm">
                 <span className="text-gray-600">{p.nombre}</span>
-                <span className="font-medium text-gray-800">${p.total.toFixed(2)}</span>
+                <span className="font-medium text-gray-800">${p.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             ))}
           </div>
@@ -347,7 +347,7 @@ const Dashboard: React.FC = () => {
                   <YAxis />
                   <Tooltip
                     formatter={(value: any, name: any, props: any) => [
-                      `$${Number(value).toFixed(2)} USD`,
+                      `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`,
                       props.payload.nombreCompleto
                     ]}
                   />
