@@ -1,5 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, JoinColumn } from 'typeorm';
-import { ITTicket } from '../../../entities/it-ticket.entity';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { ITTicket } from './it-ticket.entity';
 import { Usuario } from '../../../entities/usuario.entity';
 
 @Entity('it_ticket_comentarios')
@@ -16,7 +16,7 @@ export class ITTicketComentario {
   @Column({ name: 'usuario_id' })
   usuario_id: number;
 
-  @CreateDateColumn({ name: 'fecha_creacion' })
+  @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP', name: 'fecha_creacion' })
   fecha_creacion: Date;
 
   @ManyToOne(() => ITTicket, { nullable: true })

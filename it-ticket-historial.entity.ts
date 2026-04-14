@@ -1,5 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, JoinColumn } from 'typeorm';
-import { ITTicket } from '../../../entities/it-ticket.entity';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { ITTicket } from './it-ticket.entity';
 import { Usuario } from '../../../entities/usuario.entity';
 
 @Entity('it_ticket_historial')
@@ -28,17 +28,17 @@ export class ITTicketHistorial {
   @Column({ name: 'usuario_id' })
   usuario_id: number;
 
-  @CreateDateColumn({ name: 'fecha_cambio' })
+  @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP', name: 'fecha_cambio' })
   fecha_cambio: Date;
 
   @Column('text', { nullable: true })
   comentario: string;
 
   @ManyToOne(() => ITTicket, { nullable: true })
-  @JoinColumn({ name: 'ticket_id' })
+  @JoinColumn({ name: 'ticket_id', referencedColumnName: 'id' })
   ticket: ITTicket;
 
   @ManyToOne(() => Usuario, { nullable: true })
-  @JoinColumn({ name: 'usuario_id' })
+  @JoinColumn({ name: 'usuario_id', referencedColumnName: 'id' })
   usuario: Usuario;
 }

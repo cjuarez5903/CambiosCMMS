@@ -120,6 +120,10 @@ cp $CAMBIOS/it-tickets.service.ts $BACKEND/src/modules/it-tickets/
 cp $BACKEND/src/modules/it-tickets/it-tickets.controller.ts $BACKEND/src/modules/it-tickets/it-tickets.controller.ts.old 2>/dev/null; echo "      ✓ it-tickets.controller.ts.old"
 cp $CAMBIOS/it-tickets.controller.ts $BACKEND/src/modules/it-tickets/
 
+# it-tickets.module.ts
+cp $BACKEND/src/modules/it-tickets/it-tickets.module.ts $BACKEND/src/modules/it-tickets/it-tickets.module.ts.old 2>/dev/null; echo "      ✓ it-tickets.module.ts.old"
+cp $CAMBIOS/it-tickets.module.ts $BACKEND/src/modules/it-tickets/
+
 # usuarios.controller.ts
 cp $BACKEND/src/modules/usuarios/usuarios.controller.ts $BACKEND/src/modules/usuarios/usuarios.controller.ts.old 2>/dev/null; echo "      ✓ usuarios.controller.ts.old"
 cp $CAMBIOS/usuarios.controller.ts $BACKEND/src/modules/usuarios/
@@ -226,6 +230,40 @@ if [ $? -eq 0 ]; then
   echo "      ✓ Tabla orden_trabajo_comentarios lista"
 else
   echo "      ⚠ No se pudo crear la tabla (puede que ya exista o falta el cliente mysql)"
+fi
+
+# ── TABLAS IT TICKET COMENTARIOS / HISTORIAL ────────────
+echo ""
+echo "[5c/6] Creando tablas IT comentarios e historial si no existen..."
+
+mysql -h"$DB_HOST" -P"${DB_PORT:-3306}" -u"$DB_USER" -p"$DB_PASS" "$DB_NAME" <<'SQL'
+CREATE TABLE IF NOT EXISTS it_ticket_comentarios (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  ticket_id INT NOT NULL,
+  comentario TEXT NOT NULL,
+  usuario_id INT NOT NULL,
+  fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (ticket_id) REFERENCES it_tickets(id) ON DELETE CASCADE,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+CREATE TABLE IF NOT EXISTS it_ticket_historial (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  ticket_id INT NOT NULL,
+  estado_anterior ENUM('abierto','en_progreso','resuelto','cerrado') NULL,
+  estado_nuevo ENUM('abierto','en_progreso','resuelto','cerrado') NOT NULL,
+  usuario_id INT NOT NULL,
+  fecha_cambio DATETIME DEFAULT CURRENT_TIMESTAMP,
+  comentario TEXT NULL,
+  FOREIGN KEY (ticket_id) REFERENCES it_tickets(id) ON DELETE CASCADE,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+SQL
+
+if [ $? -eq 0 ]; then
+  echo "      ✓ Tablas IT comentarios e historial listas"
+else
+  echo "      ⚠ No se pudo crear las tablas (pueden ya existir)"
 fi
 
 # ── COMPILAR Y MIGRAR ─────────────────────────────────────
