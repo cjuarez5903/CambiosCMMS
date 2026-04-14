@@ -83,21 +83,11 @@ echo "[3b/4] Copiando archivos PWA..."
 mkdir -p $FRONTEND/public/icons
 cp $CAMBIOS/frontend/index.html          $FRONTEND/index.html;                  echo "      ✓ index.html (PWA)"
 cp $CAMBIOS/frontend/public/manifest.json $FRONTEND/public/manifest.json;       echo "      ✓ manifest.json"
-cp $CAMBIOS/frontend/public/icons/create-icons.sh $FRONTEND/public/icons/;      echo "      ✓ create-icons.sh"
+cp $CAMBIOS/frontend/public/icons/create-icons.js $FRONTEND/public/icons/;      echo "      ✓ create-icons.js"
 
-# Generar íconos si ImageMagick está instalado y aún no existen
-if command -v convert &>/dev/null; then
-  if [ ! -f $FRONTEND/public/icons/icon-192.png ]; then
-    echo "      → Generando íconos PNG con ImageMagick..."
-    bash $FRONTEND/public/icons/create-icons.sh
-  else
-    echo "      ✓ Íconos ya existen, sin cambios"
-  fi
-else
-  echo "      ⚠ ImageMagick no instalado. Ejecuta manualmente:"
-  echo "        sudo apt install imagemagick"
-  echo "        bash $FRONTEND/public/icons/create-icons.sh"
-fi
+# Generar íconos con Node.js (siempre disponible)
+echo "      → Generando íconos PNG con Node.js..."
+node $FRONTEND/public/icons/create-icons.js
 
 # ── BUILD ─────────────────────────────────────────────────
 echo ""
