@@ -28,6 +28,7 @@ const { ConfiguracionPlanta } = require('./entities/configuracion-planta.entity'
 const { LecturaPlanta } = require('./entities/lectura-planta.entity');
 const { ITTicketComentario } = require('./modules/it-tickets/entities/it-ticket-comentario.entity');
 const { ITTicketHistorial } = require('./modules/it-tickets/entities/it-ticket-historial.entity');
+const { OrdenTrabajoComentario } = require('./entities/orden-trabajo-comentario.entity');
 
 const configService = {
   get: (key: string) => process.env[key],
@@ -56,6 +57,7 @@ export const AppDataSource = new DataSource({
     LecturaPlanta,
     ITTicketComentario,
     ITTicketHistorial,
+    OrdenTrabajoComentario,
   ],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
   ssl: sslOptions,

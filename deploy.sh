@@ -141,6 +141,10 @@ mkdir -p $BACKEND/src/modules/auth/strategies
 cp $BACKEND/src/modules/auth/strategies/jwt.strategy.ts $BACKEND/src/modules/auth/strategies/jwt.strategy.ts.old 2>/dev/null; echo "      ✓ jwt.strategy.ts.old"
 cp $CAMBIOS/jwt.strategy.ts $BACKEND/src/modules/auth/strategies/
 
+# data-source.ts
+cp $BACKEND/src/data-source.ts $BACKEND/src/data-source.ts.old 2>/dev/null; echo "      ✓ data-source.ts.old"
+cp $CAMBIOS/data-source.ts $BACKEND/src/
+
 # package.json
 cp $BACKEND/package.json $BACKEND/package.json.old 2>/dev/null; echo "      ✓ package.json.old"
 cp $CAMBIOS/package.json $BACKEND/
