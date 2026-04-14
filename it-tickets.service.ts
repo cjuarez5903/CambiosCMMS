@@ -7,6 +7,7 @@ import { UpdateITTicketDto } from './dto/update-it-ticket.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import * as mysql from 'mysql2/promise';
 import { config } from 'dotenv';
+import { EmailService } from '../email/email.service';
 
 config();
 
@@ -32,6 +33,7 @@ export class ITTicketsService {
   constructor(
     @InjectRepository(ITTicket)
     private readonly itTicketRepository: Repository<ITTicket>,
+    private readonly emailService: EmailService,
   ) {}
 
   async obtenerEstadisticas(params?: { asignado_a?: string }, user?: any): Promise<any> {
@@ -540,9 +542,9 @@ export class ITTicketsService {
         };
       }
 
-      // Usar la vista v_it_tickets_por_usuario para obtener datos por técnico
+      // Consultar it_tickets directamente (evita dependencia del schema de la vista)
       const [rows] = await pool.query<any[]>(
-        `SELECT 
+        `SELECT
           COUNT(CASE WHEN estado = 'abierto' THEN 1 END) as abiertos,
           COUNT(CASE WHEN estado = 'en_progreso' THEN 1 END) as enProgreso,
           COUNT(CASE WHEN estado = 'resuelto' THEN 1 END) as resueltos,
@@ -551,36 +553,36 @@ export class ITTicketsService {
           COUNT(CASE WHEN DATE(fecha_actualizacion) = CURDATE() AND estado IN ('resuelto', 'cerrado') THEN 1 END) as resueltosHoy,
           COUNT(CASE WHEN asignado_a IS NOT NULL AND asignado_a != '' THEN 1 END) as ticketsAsignados,
           COUNT(*) as totalTickets
-        FROM v_it_tickets_por_usuario
-        WHERE tecnico_email = ?`,
-        [userEmail]
+        FROM it_tickets
+        WHERE asignado_a = ? OR solicitante = ?`,
+        [userEmail, userEmail]
       );
       const statsData = rows[0];
 
       // Estadísticas por categoría
       const [categoriasRows] = await pool.query<any[]>(
         `SELECT categoria, COUNT(*) as value
-        FROM v_it_tickets_por_usuario
-        WHERE tecnico_email = ? AND categoria IS NOT NULL AND categoria != ''
+        FROM it_tickets
+        WHERE (asignado_a = ? OR solicitante = ?) AND categoria IS NOT NULL AND categoria != ''
         GROUP BY categoria
         ORDER BY value DESC`,
-        [userEmail]
+        [userEmail, userEmail]
       );
 
       // Estadísticas por prioridad
       const [prioridadesRows] = await pool.query<any[]>(
         `SELECT prioridad, COUNT(*) as value
-        FROM v_it_tickets_por_usuario
-        WHERE tecnico_email = ? AND prioridad IS NOT NULL AND prioridad != ''
+        FROM it_tickets
+        WHERE (asignado_a = ? OR solicitante = ?) AND prioridad IS NOT NULL AND prioridad != ''
         GROUP BY prioridad
-        ORDER BY 
+        ORDER BY
           CASE prioridad
             WHEN 'critica' THEN 1
             WHEN 'alta' THEN 2
             WHEN 'media' THEN 3
             WHEN 'baja' THEN 4
           END`,
-        [userEmail]
+        [userEmail, userEmail]
       );
 
       const porCategoria = {
@@ -865,7 +867,40 @@ export class ITTicketsService {
       connection.release();
 
       const comentarioId = (result as any).insertId;
-      
+      const autorEmail = user?.email;
+
+      setImmediate(async () => {
+        try {
+          const conn2 = await pool.getConnection();
+          const [infoRows] = await conn2.query(
+            `SELECT t.titulo, t.solicitante, t.asignado_a,
+                    CONCAT(u.nombre, ' ', u.apellido) AS autor_nombre
+             FROM it_tickets t
+             JOIN usuarios u ON u.id = ?
+             WHERE t.id = ?`,
+            [usuarioId, id]
+          ) as [any[], any];
+          conn2.release();
+
+          const info = infoRows[0];
+          if (!info) return;
+
+          const correos = [info.solicitante, info.asignado_a]
+            .filter((e: string) => e && e !== autorEmail);
+          if (correos.length === 0) return;
+
+          await this.emailService.enviarComentarioTicketIT({
+            ticketId: id,
+            titulo: info.titulo,
+            comentario,
+            autor: info.autor_nombre,
+            correos,
+          });
+        } catch (e) {
+          console.error('Error enviando email de comentario IT:', e?.message);
+        }
+      });
+
       return { id: comentarioId, ticket_id: id, comentario, usuario_id: usuarioId };
     } catch (error) {
       console.error('Error al agregar comentario:', error);
