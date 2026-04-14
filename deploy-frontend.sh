@@ -98,6 +98,9 @@ cd $FRONTEND
 npm install --silent
 npm run build
 
+# iOS requiere apple-touch-icon en dist/ directamente
+cp $FRONTEND/public/apple-touch-icon.png $FRONTEND/dist/apple-touch-icon.png 2>/dev/null && echo "      ✓ apple-touch-icon.png → dist/"
+
 echo ""
 echo "======================================================"
 echo " ✅ Frontend actualizado!"
