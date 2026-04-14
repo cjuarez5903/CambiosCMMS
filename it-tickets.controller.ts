@@ -18,7 +18,7 @@ import { CreateITTicketDto } from './dto/create-it-ticket.dto';
 import { UpdateITTicketDto } from './dto/update-it-ticket.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { PermissionsGuard as PermisosGuard } from '../../common/guards/permisos.guard';
+import { PermisosGuard } from '../../common/guards/permisos.guard';
 import { UsuarioActual } from '../../common/decorators/usuario-actual.decorator';
 import { RequierePermisos } from '../../common/decorators/permisos.decorator';
 // BUG 7 FIX: eliminado import directo de pool — la lógica fue movida al service
