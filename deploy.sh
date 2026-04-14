@@ -170,6 +170,7 @@ cp $CAMBIOS/1733880200000-AgregarSolicitadoPor.ts $BACKEND/src/migrations/; echo
 # Nuevas
 cp $CAMBIOS/1733880400000-AgregarGerentePaisYPlantaTratamiento.ts $BACKEND/src/migrations/; echo "      ✓ 1733880400000 (nueva)"
 cp $CAMBIOS/1733880500000-CorregirFormatoPermisosIT.ts $BACKEND/src/migrations/; echo "      ✓ 1733880500000 (nueva)"
+cp $CAMBIOS/1733880600000-CrearVistasITTickets.ts $BACKEND/src/migrations/; echo "      ✓ 1733880600000 (nueva)"
 
 # ── VARIABLES DE ENTORNO ─────────────────────────────────
 echo ""
@@ -232,11 +233,14 @@ cd $BACKEND
 echo "      → npm install..."
 npm install --silent || rollback
 
+echo "      → fix permisos ts-node..."
+chmod +x node_modules/.bin/ts-node node_modules/.bin/ts-node-script 2>/dev/null || true
+
 echo "      → npm run build..."
 npm run build || rollback
 
 echo "      → npm run migration:run..."
-npm run migration:run || rollback
+NODE_TLS_REJECT_UNAUTHORIZED=0 npm run migration:run || rollback
 
 echo ""
 echo "======================================================"
