@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
-import { ITTicket } from './it-ticket.entity';
+import { ITTicket } from '../../../entities/it-ticket.entity';
 import { Usuario } from '../../../entities/usuario.entity';
 
 @Entity('it_ticket_historial')
