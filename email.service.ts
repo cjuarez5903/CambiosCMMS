@@ -436,7 +436,9 @@ export class EmailService {
     destinatarios: string[];
   }): Promise<void> {
     const emailFrom = this.configService.get<string>('EMAIL_FROM');
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
     const TIMEOUT_MS = 8000;
+    const ticketUrl = `${frontendUrl}/#/it-soluciones?openTicket=${params.ticketId}`;
 
     const prioridadLabel: Record<string, string> = {
       baja: 'Baja', media: 'Media', alta: 'Alta', critica: 'Crítica',
@@ -463,6 +465,9 @@ export class EmailService {
             <div class="info-row"><span class="label">Prioridad:</span> <span class="badge">${prioridadLabel[params.prioridad] || params.prioridad}</span></div>
             <div class="info-row"><span class="label">Solicitante:</span> ${params.solicitante}</div>
           </div>
+          <div style="text-align:center;margin:20px 0">
+            <a href="${ticketUrl}" style="background:#1e3a8a;color:white;padding:10px 24px;border-radius:5px;text-decoration:none;font-weight:bold">Ver Ticket IT #${params.ticketId}</a>
+          </div>
           <div class="footer"><p>Sistema CMMS — Mr. B Storage. No responder este correo.</p></div>
         </div>
       </div>
@@ -479,7 +484,9 @@ export class EmailService {
     destinatarios: string[];
   }): Promise<void> {
     const emailFrom = this.configService.get<string>('EMAIL_FROM');
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
     const TIMEOUT_MS = 8000;
+    const ticketUrl = `${frontendUrl}/#/it-soluciones?openTicket=${params.ticketId}`;
 
     const htmlTecnico = `<!DOCTYPE html><html><head><style>
       body{font-family:Arial,sans-serif;line-height:1.6;color:#333}
@@ -498,6 +505,9 @@ export class EmailService {
             <div class="info-row"><span class="label">Ticket #:</span> ${params.ticketId}</div>
             <div class="info-row"><span class="label">Título:</span> ${params.titulo}</div>
             <div class="info-row"><span class="label">Solicitante:</span> ${params.solicitante}</div>
+          </div>
+          <div style="text-align:center;margin:20px 0">
+            <a href="${ticketUrl}" style="background:#0369a1;color:white;padding:10px 24px;border-radius:5px;text-decoration:none;font-weight:bold">Ver Ticket IT #${params.ticketId}</a>
           </div>
           <div class="footer"><p>Sistema CMMS — Mr. B Storage. No responder este correo.</p></div>
         </div>
@@ -522,6 +532,9 @@ export class EmailService {
             <div class="info-row"><span class="label">Título:</span> ${params.titulo}</div>
             <div class="info-row"><span class="label">Asignado a:</span> ${params.tecnicoEmail}</div>
           </div>
+          <div style="text-align:center;margin:20px 0">
+            <a href="${ticketUrl}" style="background:#0369a1;color:white;padding:10px 24px;border-radius:5px;text-decoration:none;font-weight:bold">Ver Ticket IT #${params.ticketId}</a>
+          </div>
           <div class="footer"><p>Sistema CMMS — Mr. B Storage. No responder este correo.</p></div>
         </div>
       </div>
@@ -544,7 +557,9 @@ export class EmailService {
     destinatarios: string[];
   }): Promise<void> {
     const emailFrom = this.configService.get<string>('EMAIL_FROM');
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
     const TIMEOUT_MS = 8000;
+    const ticketUrl = `${frontendUrl}/#/it-soluciones?openTicket=${params.ticketId}`;
 
     const estadoLabel: Record<string, string> = {
       abierto: 'Abierto', en_progreso: 'En Progreso', resuelto: 'Resuelto', cerrado: 'Cerrado',
@@ -570,6 +585,9 @@ export class EmailService {
             <div class="info-row"><span class="label">Estado anterior:</span> <span class="badge-ant">${estadoLabel[params.estadoAnterior] || params.estadoAnterior}</span></div>
             <div class="info-row"><span class="label">Estado actual:</span> <span class="badge-new">${estadoLabel[params.estadoNuevo] || params.estadoNuevo}</span></div>
           </div>
+          <div style="text-align:center;margin:20px 0">
+            <a href="${ticketUrl}" style="background:#1e3a8a;color:white;padding:10px 24px;border-radius:5px;text-decoration:none;font-weight:bold">Ver Ticket IT #${params.ticketId}</a>
+          </div>
           <div class="footer"><p>Sistema CMMS — Mr. B Storage. No responder este correo.</p></div>
         </div>
       </div>
@@ -582,11 +600,13 @@ export class EmailService {
     ticketId: number;
     titulo: string;
     comentario: string;
-    autorEmail: string;
-    destinatario: string;
+    autor: string;
+    correos: string[];
   }): Promise<void> {
     const emailFrom = this.configService.get<string>('EMAIL_FROM');
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
     const TIMEOUT_MS = 8000;
+    const ticketUrl = `${frontendUrl}/#/it-soluciones?openTicket=${params.ticketId}`;
 
     const html = `<!DOCTYPE html><html><head><style>
       body{font-family:Arial,sans-serif;line-height:1.6;color:#333}
@@ -604,15 +624,18 @@ export class EmailService {
           <div class="info-box">
             <div class="info-row"><span class="label">Ticket #:</span> ${params.ticketId}</div>
             <div class="info-row"><span class="label">Título:</span> ${params.titulo}</div>
-            <div class="info-row"><span class="label">Comentó:</span> ${params.autorEmail}</div>
+            <div class="info-row"><span class="label">Comentó:</span> ${params.autor}</div>
           </div>
           <div class="comentario-box">${params.comentario}</div>
+          <div style="text-align:center;margin:20px 0">
+            <a href="${ticketUrl}" style="background:#7c3aed;color:white;padding:10px 24px;border-radius:5px;text-decoration:none;font-weight:bold">Ver Ticket IT #${params.ticketId}</a>
+          </div>
           <div class="footer"><p>Sistema CMMS — Mr. B Storage. No responder este correo.</p></div>
         </div>
       </div>
     </body></html>`;
 
-    await this.enviarConTimeoutSimple(emailFrom, params.destinatario, `Nuevo comentario en Ticket IT #${params.ticketId}`, html, TIMEOUT_MS);
+    await this.enviarMultiples(emailFrom, params.correos, `Nuevo comentario en Ticket IT #${params.ticketId}`, html, TIMEOUT_MS);
   }
 
   // ── ÓRDENES DE TRABAJO — COMENTARIOS ────────────────────────────────────
