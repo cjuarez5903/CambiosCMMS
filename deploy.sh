@@ -116,6 +116,10 @@ cp $CAMBIOS/email.service.ts $BACKEND/src/modules/email/
 cp $BACKEND/src/modules/it-tickets/it-tickets.service.ts $BACKEND/src/modules/it-tickets/it-tickets.service.ts.old 2>/dev/null; echo "      ✓ it-tickets.service.ts.old"
 cp $CAMBIOS/it-tickets.service.ts $BACKEND/src/modules/it-tickets/
 
+# it-tickets.controller.ts
+cp $BACKEND/src/modules/it-tickets/it-tickets.controller.ts $BACKEND/src/modules/it-tickets/it-tickets.controller.ts.old 2>/dev/null; echo "      ✓ it-tickets.controller.ts.old"
+cp $CAMBIOS/it-tickets.controller.ts $BACKEND/src/modules/it-tickets/
+
 # usuarios.controller.ts
 cp $BACKEND/src/modules/usuarios/usuarios.controller.ts $BACKEND/src/modules/usuarios/usuarios.controller.ts.old 2>/dev/null; echo "      ✓ usuarios.controller.ts.old"
 cp $CAMBIOS/usuarios.controller.ts $BACKEND/src/modules/usuarios/
