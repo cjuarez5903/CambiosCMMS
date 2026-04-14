@@ -148,8 +148,9 @@ export class PlantaTratamientoService {
     const usuario = await this.validarAccesoGuatemala(usuarioId);
 
     // Administrador de Sucursal solo ve su propia sucursal
-    if (usuario.rol?.nombre !== 'Administrador' && usuario.sucursalId) {
-      filtros = { ...filtros, sucursalId: usuario.sucursalId };
+    const sucursalUsuario = usuario.sucursalId || usuario.sucursal?.id;
+    if (usuario.rol?.nombre !== 'Administrador' && sucursalUsuario) {
+      filtros = { ...filtros, sucursalId: sucursalUsuario };
     }
     const pagina = filtros?.pagina || 1;
     const porPagina = filtros?.porPagina || 50;
@@ -232,8 +233,9 @@ export class PlantaTratamientoService {
     const usuario = await this.validarAccesoGuatemala(usuarioId);
 
     // Administrador de Sucursal solo ve su propia sucursal
-    if (usuario.rol?.nombre !== 'Administrador' && usuario.sucursalId) {
-      sucursalId = usuario.sucursalId;
+    const sucursalUsuarioDash = usuario.sucursalId || usuario.sucursal?.id;
+    if (usuario.rol?.nombre !== 'Administrador' && sucursalUsuarioDash) {
+      sucursalId = sucursalUsuarioDash;
     }
     const query = this.lecturaRepository
       .createQueryBuilder('lectura')
