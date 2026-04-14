@@ -77,6 +77,28 @@ copiar_fe components/HistorialOrden.tsx                   $FRONTEND/components/H
 copiar_fe pages/WorkOrders.tsx                            $FRONTEND/pages/WorkOrders.tsx
 copiar_fe src/services/ordenes-trabajo.service.ts         $FRONTEND/src/services/ordenes-trabajo.service.ts
 
+# ── PWA ───────────────────────────────────────────────────
+echo ""
+echo "[3b/4] Copiando archivos PWA..."
+mkdir -p $FRONTEND/public/icons
+cp $CAMBIOS/frontend/index.html          $FRONTEND/index.html;                  echo "      ✓ index.html (PWA)"
+cp $CAMBIOS/frontend/public/manifest.json $FRONTEND/public/manifest.json;       echo "      ✓ manifest.json"
+cp $CAMBIOS/frontend/public/icons/create-icons.sh $FRONTEND/public/icons/;      echo "      ✓ create-icons.sh"
+
+# Generar íconos si ImageMagick está instalado y aún no existen
+if command -v convert &>/dev/null; then
+  if [ ! -f $FRONTEND/public/icons/icon-192.png ]; then
+    echo "      → Generando íconos PNG con ImageMagick..."
+    bash $FRONTEND/public/icons/create-icons.sh
+  else
+    echo "      ✓ Íconos ya existen, sin cambios"
+  fi
+else
+  echo "      ⚠ ImageMagick no instalado. Ejecuta manualmente:"
+  echo "        sudo apt install imagemagick"
+  echo "        bash $FRONTEND/public/icons/create-icons.sh"
+fi
+
 # ── BUILD ─────────────────────────────────────────────────
 echo ""
 echo "[4/4] Build del frontend..."
