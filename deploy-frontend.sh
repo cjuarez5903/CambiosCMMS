@@ -84,6 +84,7 @@ mkdir -p $FRONTEND/public/icons
 cp $CAMBIOS/frontend/index.html                          $FRONTEND/index.html;                        echo "      ✓ index.html (PWA)"
 cp $CAMBIOS/frontend/public/manifest.json                $FRONTEND/public/manifest.json;              echo "      ✓ manifest.json"
 cp $CAMBIOS/frontend/public/favicon.ico                  $FRONTEND/public/favicon.ico;                echo "      ✓ favicon.ico"
+cp $CAMBIOS/frontend/public/apple-touch-icon.png         $FRONTEND/public/apple-touch-icon.png;       echo "      ✓ apple-touch-icon.png (iOS raíz)"
 cp $CAMBIOS/frontend/public/icons/icon-180.png           $FRONTEND/public/icons/icon-180.png;         echo "      ✓ icon-180.png (iOS)"
 cp $CAMBIOS/frontend/public/icons/icon-192.png           $FRONTEND/public/icons/icon-192.png;         echo "      ✓ icon-192.png"
 cp $CAMBIOS/frontend/public/icons/icon-192-maskable.png  $FRONTEND/public/icons/icon-192-maskable.png; echo "      ✓ icon-192-maskable.png"
